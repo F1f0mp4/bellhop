@@ -18,7 +18,14 @@ export type StagedFile = {
   season?: number;
   episode?: number;
   episodeEnd?: number;
-  upload?: { state: UploadState; progress: number; error?: string; stalls?: number };
+  upload?: {
+    state: UploadState;
+    progress: number;
+    error?: string;
+    stalls?: number;
+    speed?: number; // bytes per second, averaged over the last few seconds
+    eta?: number; // seconds left at that speed
+  };
   result?: { ok: boolean; to: string; error?: string };
 };
 
@@ -139,6 +146,25 @@ export function addEntries(entries: NewEntry[], opts: { forceType?: MediaType; t
 const lastActivity = new Map<string, number>();
 const STALL_MS = 20_000;
 
+// Recent [time, bytes sent] points per upload, for a speed that doesn't jump around.
+const samples = new Map<string, [number, number][]>();
+const SPEED_WINDOW_MS = 8_000;
+
+function trackSpeed(key: string, sent: number, total: number) {
+  const now = Date.now();
+  let points = samples.get(key) ?? [];
+  // After a reconnect the client may re-send part of a piece; start the average over.
+  if (points.length && sent < points[points.length - 1][1]) points = [];
+  points.push([now, sent]);
+  while (points.length > 2 && now - points[0][0] > SPEED_WINDOW_MS) points.shift();
+  samples.set(key, points);
+  const [t0, b0] = points[0];
+  const elapsed = (now - t0) / 1000;
+  if (elapsed < 1) return {};
+  const speed = (sent - b0) / elapsed;
+  return { speed, eta: speed > 0 ? (total - sent) / speed : undefined };
+}
+
 function createUpload(key: string, file: File) {
   const upload = new tus.Upload(file, {
     endpoint: '/api/uploads',
@@ -150,10 +176,11 @@ function createUpload(key: string, file: File) {
     removeFingerprintOnSuccess: true,
     onProgress: (sent, total) => {
       lastActivity.set(key, Date.now());
-      patchUpload(key, { progress: total ? sent / total : 0 });
+      patchUpload(key, { progress: total ? sent / total : 0, ...trackSpeed(key, sent, total) });
     },
     onChunkComplete: () => lastActivity.set(key, Date.now()),
     onSuccess: () => {
+      samples.delete(key);
       patchFile(key, { ref: upload.url!.split('/').pop(), upload: { state: 'done', progress: 1 } });
       pump();
     },
@@ -187,7 +214,13 @@ setInterval(() => {
   for (const f of state.files) {
     if (f.upload?.state !== 'uploading') continue;
     const u = uploads.get(f.key);
-    if (!u || now - (lastActivity.get(f.key) ?? now) < STALL_MS) continue;
+    const idle = now - (lastActivity.get(f.key) ?? now);
+    // Nothing moving for a few seconds: show that instead of a stale speed.
+    if (idle > 3000 && f.upload.speed) {
+      samples.delete(f.key);
+      patchUpload(f.key, { speed: 0, eta: undefined });
+    }
+    if (!u || idle < STALL_MS) continue;
     lastActivity.set(f.key, now);
     patchUpload(f.key, { stalls: (f.upload.stalls ?? 0) + 1 });
     // abort() cancels the hung request; start() asks the server how much it has and carries on.
@@ -195,11 +228,12 @@ setInterval(() => {
       if (state.files.find((x) => x.key === f.key)?.upload?.state === 'uploading') u.start();
     });
   }
-}, 5000);
+}, 1000);
 
 export function pauseUpload(key: string) {
   uploads.get(key)?.abort();
-  patchUpload(key, { state: 'paused' });
+  samples.delete(key);
+  patchUpload(key, { state: 'paused', speed: undefined, eta: undefined });
   pump();
 }
 
@@ -280,3 +314,12 @@ export const hasActiveUploads = () => state.files.some((f) => f.upload && ['queu
 window.addEventListener('beforeunload', (e) => {
   if (hasActiveUploads()) e.preventDefault();
 });
+
+/** Combined speed and time left for everything still uploading or waiting to. */
+export function uploadTotals(files: StagedFile[]) {
+  const pending = files.filter((f) => f.upload && ['queued', 'uploading'].includes(f.upload.state));
+  if (!pending.length) return null;
+  const speed = pending.reduce((n, f) => n + (f.upload!.speed ?? 0), 0);
+  const left = pending.reduce((n, f) => n + f.size * (1 - f.upload!.progress), 0);
+  return { count: pending.length, speed, left, eta: speed > 0 ? left / speed : undefined };
+}

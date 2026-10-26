@@ -12,6 +12,17 @@ export function ago(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** 45 s, 12 min, 1 h 5 min */
+export function duration(seconds: number | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return '';
+  const s = Math.max(1, Math.round(seconds));
+  if (s < 60) return `${s} s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+}
+
 export function bytes(n: number | null | undefined): string {
   if (n == null) return '';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

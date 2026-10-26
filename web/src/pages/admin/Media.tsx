@@ -29,7 +29,7 @@ import { useToast } from '../../components/Toast.tsx';
 import { Button, Card, Dialog, Empty, Field, Input, PageTitle, Poster, Select, Spinner, Tabs } from '../../components/ui.tsx';
 import { api } from '../../lib/api.ts';
 import { filesFromDrop, filesFromInput } from '../../lib/dropFiles.ts';
-import { bytes, cx } from '../../lib/format.ts';
+import { bytes, cx, duration } from '../../lib/format.ts';
 import { TYPE_INFO } from '../../lib/labels.ts';
 import {
   addEntries,
@@ -43,6 +43,7 @@ import {
   resumeUpload,
   updateFile,
   updateGroup,
+  uploadTotals,
   useStaging,
   type Group,
   type NewEntry,
@@ -142,6 +143,7 @@ function AddMedia({ status }: { status: MediaStatus }) {
     return gf.length > 0 && gf.every(isReady) && gf.every((f) => !validateMeta(fileMeta(g, f)));
   });
   const anyIncoming = files.some((f) => f.source === 'incoming' && !f.result?.ok);
+  const totals = uploadTotals(files);
   const finished = files.some((f) => f.result?.ok);
 
   const runImport = async (ids: string[]) => {
@@ -232,8 +234,14 @@ function AddMedia({ status }: { status: MediaStatus }) {
       {files.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-bg/90 backdrop-blur-md">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-            <span className="text-sm text-muted">
+            <span className="text-sm text-muted tabular-nums">
               {ready.length} of {files.filter((f) => !f.result?.ok).length} ready
+              {totals && (
+                <>
+                  {' · '}uploading {totals.count} at {bytes(totals.speed)}/s
+                  {totals.eta != null && `, about ${duration(totals.eta)} left`}
+                </>
+              )}
             </span>
             {anyIncoming && (
               <label className="flex cursor-pointer items-center gap-2 text-sm" title="Hard-links files so torrents keep seeding and no extra space is used">
@@ -580,25 +588,27 @@ function FileRow({ file: f, meta, dirs, series }: { file: StagedFile; meta: Meta
         </div>
       )}
 
-      <div className="flex w-full items-center gap-2 sm:w-52">
+      <div className="flex w-full items-center gap-2 sm:w-64">
         {f.result?.ok ? (
           <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
             <Check className="size-3.5" /> Imported
           </span>
         ) : up ? (
           <>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-              <div
-                className={cx('h-full rounded-full transition-[width]', up.state === 'error' ? 'bg-rose-500' : up.state === 'done' ? 'bg-emerald-500' : 'bg-accent')}
-                style={{ width: `${Math.round(up.progress * 100)}%` }}
-              />
-            </div>
-            <span
-              className="w-16 text-right text-xs text-muted tabular-nums"
+            <div
+              className="min-w-0 flex-1"
               title={up.error ?? (up.stalls ? `The connection stalled ${up.stalls}× and Bellhop picked up where it left off` : undefined)}
             >
-              {up.state === 'done' ? bytes(f.size) : up.state === 'error' ? 'failed' : up.state === 'queued' ? 'waiting' : `${Math.floor(up.progress * 100)}%`}
-            </span>
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                <div
+                  className={cx('h-full rounded-full transition-[width]', up.state === 'error' ? 'bg-rose-500' : up.state === 'done' ? 'bg-emerald-500' : 'bg-accent')}
+                  style={{ width: `${Math.round(up.progress * 100)}%` }}
+                />
+              </div>
+              <div className="mt-1 flex justify-between gap-2 text-[11px] text-muted tabular-nums">
+                <UploadStatus file={f} />
+              </div>
+            </div>
             {up.state === 'uploading' && (
               <Button variant="ghost" size="icon" className="size-7" onClick={() => pauseUpload(f.key)} aria-label="Pause">
                 <Pause className="size-3.5" />
@@ -620,6 +630,25 @@ function FileRow({ file: f, meta, dirs, series }: { file: StagedFile; meta: Meta
         )}
       </div>
     </li>
+  );
+}
+
+function UploadStatus({ file: f }: { file: StagedFile }) {
+  const up = f.upload!;
+  if (up.state === 'done') return <span className="ml-auto">{bytes(f.size)}</span>;
+  if (up.state === 'error') return <span className="ml-auto text-rose-500">failed</span>;
+  if (up.state === 'queued') return <span className="ml-auto">waiting</span>;
+  const pct = `${Math.floor(up.progress * 100)}%`;
+  if (up.state === 'paused') return <><span>{pct}</span><span>paused</span></>;
+  if (up.speed === 0) return <><span>{pct}</span><span className="text-amber-600 dark:text-amber-300">stalled, reconnecting…</span></>;
+  return (
+    <>
+      <span>{pct}</span>
+      <span className="truncate">
+        {up.speed ? `${bytes(up.speed)}/s` : 'starting…'}
+        {up.eta != null && ` · ${duration(up.eta)} left`}
+      </span>
+    </>
   );
 }
 
