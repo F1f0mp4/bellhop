@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowRight,
   Check,
   ChevronRight,
@@ -52,7 +53,16 @@ import type { Ticket } from '../../lib/types.ts';
 import { useFetch } from '../../lib/useFetch.ts';
 
 type Folder = { path: string; exists: boolean; writable: boolean };
-type MediaStatus = { library: Folder; incoming: Folder; dirs: Dirs; jellyfin: boolean };
+type LibraryFolder = { key: string; name: string; exists: boolean; writable: boolean };
+type MediaStatus = {
+  library: Folder;
+  uploads: { path: string; writable: boolean };
+  folders: LibraryFolder[];
+  incoming: Folder;
+  user: string;
+  dirs: Dirs;
+  jellyfin: boolean;
+};
 type Entry = { name: string; path: string; dir: boolean; size: number | null; mtime: string; kind: string };
 type Listing = { path: string; entries: Entry[] };
 
@@ -153,17 +163,35 @@ function AddMedia({ status }: { status: MediaStatus }) {
     }
   };
 
-  if (!status.library.writable) {
+  if (!status.library.exists) {
     return (
-      <Empty icon={<HardDriveDownload className="size-5" />} title="The media folder isn't writable">
-        Bellhop looks for your library at <code>{status.library.path}</code>. Mount it in docker-compose.yml and check that PUID/PGID can
-        write to it.
+      <Empty icon={<HardDriveDownload className="size-5" />} title="No media folder mounted">
+        Bellhop looks for your library at <code>{status.library.path}</code>. Mount your media dataset there.
       </Empty>
     );
   }
 
+  const blocked = status.folders.filter((f) => !f.writable);
+
   return (
     <div className="space-y-6 pb-24">
+      {blocked.length > 0 && (
+        <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+          <div>
+            Bellhop runs as user <b>{status.user}</b> and can't write to{' '}
+            {blocked.map((f, i) => (
+              <span key={f.key}>
+                {i > 0 && ', '}
+                <code>{f.name}/</code>
+                {!f.exists && ' (missing, and the media folder is read-only so it cannot be created)'}
+              </span>
+            ))}
+            . Imports into {blocked.length === 1 ? 'it' : 'them'} will fail until that user has write access, or the folder name in Settings is
+            changed to match yours.
+          </div>
+        </div>
+      )}
       {ticketId && ticket && (
         <div className="flex items-center gap-4 rounded-xl border border-accent/40 bg-accent-soft p-3">
           <Poster media={ticket.media_ref} type={ticket.type} className={ticket.type === 'music' ? 'size-12' : 'h-14 w-10'} />

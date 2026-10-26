@@ -15,7 +15,7 @@ type SettingsData = {
 };
 
 type Folder = { path: string; exists: boolean; writable: boolean };
-type MediaStatus = { library: Folder; incoming: Folder };
+type MediaStatus = { library: Folder; incoming: Folder; folders: { key: string; name: string; exists: boolean; writable: boolean }[]; user: string };
 type TestResult = { ok: boolean; message: string };
 
 export function Settings() {
@@ -115,8 +115,12 @@ export function Settings() {
           </div>
           {status && (
             <div className="space-y-2 rounded-lg bg-surface-2 p-3 text-sm">
-              <FolderLine name="Media" f={status.library} />
+              <FolderLine name="Media" f={status.library} label={status.library.exists ? 'mounted' : undefined} />
+              {status.folders.map((f) => (
+                <FolderLine key={f.key} name={`  ${f.name}`} f={{ path: f.exists ? `${status.library.path}/${f.name}` : 'will be created', exists: f.exists || f.writable, writable: f.writable }} />
+              ))}
               <FolderLine name="Incoming" f={status.incoming} optional />
+              <p className="pt-1 text-xs text-muted">Bellhop runs as user {status.user}.</p>
             </div>
           )}
         </Section>
@@ -168,15 +172,15 @@ function TestRow({ onTest, result }: { onTest: () => Promise<void>; result: Test
   );
 }
 
-function FolderLine({ name, f, optional }: { name: string; f: Folder; optional?: boolean }) {
-  const ok = f.exists && f.writable;
+function FolderLine({ name, f, optional, label }: { name: string; f: Folder; optional?: boolean; label?: string }) {
+  const ok = Boolean(label) || (f.exists && f.writable);
   return (
     <div className="flex items-center gap-2">
       <FolderOpen className="size-4 text-muted" />
       <span className="w-20 text-muted">{name}</span>
       <code className="truncate text-xs">{f.path}</code>
       <span className={`ml-auto shrink-0 text-xs ${ok ? 'text-emerald-600 dark:text-emerald-400' : optional ? 'text-muted' : 'text-rose-500'}`}>
-        {ok ? 'writable' : f.exists ? 'read-only' : optional ? 'not mounted' : 'missing'}
+        {label ?? (ok ? 'writable' : f.exists ? 'read-only' : optional ? 'not mounted' : 'missing')}
       </span>
     </div>
   );

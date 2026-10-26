@@ -14,8 +14,21 @@ import { resolveInside, toRel, UnsafePathError } from '../media/safePath.ts';
 import { setStatus } from './tickets.ts';
 
 // Uploads land on the same disk as the library so the final move is an instant rename.
+// If the media folder won't take a staging folder, fall back to the data folder (imports then copy).
 const TMP = '.bellhop-tmp';
-const tmpDir = path.join(config.mediaDir, TMP);
+const tmpDir = (() => {
+  const preferred = path.join(config.mediaDir, TMP);
+  try {
+    fs.mkdirSync(preferred, { recursive: true });
+    fs.accessSync(preferred, fs.constants.W_OK);
+    return preferred;
+  } catch {
+    const fallback = path.join(config.dataDir, 'uploads');
+    fs.mkdirSync(fallback, { recursive: true });
+    console.warn(`  Can't write ${preferred}; staging uploads in ${fallback} instead.`);
+    return fallback;
+  }
+})();
 
 const store = new FileStore({ directory: tmpDir, expirationPeriodInMilliseconds: 7 * 864e5 });
 export const tus = new TusServer({
@@ -63,14 +76,29 @@ async function writable(dir: string) {
 
 export const mediaRoutes = new Hono<AppEnv>().use(requireAdmin);
 
-mediaRoutes.get('/status', async (c) =>
-  c.json({
-    library: { path: config.mediaDir, exists: await exists(config.mediaDir), writable: await writable(config.mediaDir) },
+const runAs = () => `${process.getuid?.() ?? '?'}:${process.getgid?.() ?? '?'}`;
+
+// The media root itself may be read-only (common on TrueNAS); only the library folders
+// and the upload staging folder need to be writable.
+mediaRoutes.get('/status', async (c) => {
+  const rootWritable = await writable(config.mediaDir);
+  const folders = await Promise.all(
+    Object.entries(dirs()).map(async ([key, name]) => {
+      const dir = path.join(config.mediaDir, name);
+      const there = await exists(dir);
+      return { key, name, exists: there, writable: there ? await writable(dir) : rootWritable };
+    }),
+  );
+  return c.json({
+    library: { path: config.mediaDir, exists: await exists(config.mediaDir), writable: rootWritable },
+    uploads: { path: tmpDir, writable: await writable(tmpDir) },
+    folders,
     incoming: { path: config.incomingDir, exists: await exists(config.incomingDir), writable: await writable(config.incomingDir) },
+    user: runAs(),
     dirs: dirs(),
     jellyfin: Boolean(getSetting('jellyfin_url') && getSetting('jellyfin_key')),
-  }),
-);
+  });
+});
 
 mediaRoutes.get('/browse', async (c) => {
   const root = rootFor(c.req.query('root'));
@@ -177,7 +205,13 @@ mediaRoutes.post('/import', async (c) => {
       if (item.source === 'upload') await store.configstore.delete(item.ref);
       results.push({ name: item.name, to, ok: true });
     } catch (e) {
-      const message = e instanceof UnsafePathError ? 'That path is outside the allowed folders' : (e as Error).message;
+      const code = (e as NodeJS.ErrnoException).code;
+      const message =
+        e instanceof UnsafePathError
+          ? 'That path is outside the allowed folders'
+          : code === 'EACCES' || code === 'EPERM'
+            ? `No permission to write to ${to.split('/')[0] || 'the media folder'}/ as user ${runAs()}`
+            : (e as Error).message;
       results.push({ name: item.name, to, ok: false, error: message });
     }
   }

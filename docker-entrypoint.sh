@@ -29,10 +29,10 @@ if [ "$(id -u)" = "0" ]; then
   chown -R "$PUID:$PGID" "$DATA_DIR" || warn_chown "$DATA_DIR"
   check_writable "$DATA_DIR"
   if [ -d "$MEDIA_DIR" ]; then
-    # Not recursive: a large library would make every start slow.
-    mkdir -p "$MEDIA_DIR/.bellhop-tmp"
-    chown "$PUID:$PGID" "$MEDIA_DIR/.bellhop-tmp" || warn_chown "$MEDIA_DIR/.bellhop-tmp"
-    check_writable "$MEDIA_DIR"
+    # Staging folder for uploads. Nothing else in the library is touched here: a recursive
+    # chown would be slow, and the app reports any folder it can't write to.
+    mkdir -p "$MEDIA_DIR/.bellhop-tmp" || true
+    chown "$PUID:$PGID" "$MEDIA_DIR/.bellhop-tmp" 2>/dev/null || warn_chown "$MEDIA_DIR/.bellhop-tmp"
   fi
   exec su-exec "$PUID:$PGID" "$@"
 fi
