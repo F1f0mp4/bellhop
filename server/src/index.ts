@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { serve } from '@hono/node-server';
+import http from 'node:http';
+import { getRequestListener } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { requireAdmin, sameOrigin, seedAdmin, type AppEnv } from './auth.ts';
+import { isCrossOrigin, sameOrigin, seedAdmin, userFromCookieHeader, type AppEnv } from './auth.ts';
 import { config } from './config.ts';
 import { authRoutes } from './routes/auth.ts';
 import { cleanupUploads, mediaRoutes, tus } from './routes/media.ts';
@@ -33,10 +34,6 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/services', serviceRoutes);
 app.route('/api/wiki', wikiRoutes);
 
-// Resumable uploads (tus protocol). Handled outside Hono's body parsing so multi-GB files stream to disk.
-app.all('/api/uploads', requireAdmin, (c) => tus.handleWeb(c.req.raw));
-app.all('/api/uploads/*', requireAdmin, (c) => tus.handleWeb(c.req.raw));
-
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
 // The built web app, with index.html as the fallback for client-side routes.
@@ -55,14 +52,40 @@ app.onError((err, c) => {
   return c.json({ error: 'Something went wrong on the server' }, 500);
 });
 
-const server = serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
-  console.log(`  Bellhop is ready on http://localhost:${port}`);
-  console.log(`  library:  ${config.mediaDir}\n  incoming: ${config.incomingDir}\n  data:     ${config.dataDir}`);
+const honoListener = getRequestListener(app.fetch);
+
+function sendJson(res: http.ServerResponse, status: number, body: object) {
+  res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+}
+
+// Resumable uploads (tus protocol) go straight to tus's Node handler on the raw request.
+// Converting them to web streams first hid client disconnects from tus, so an interrupted
+// piece could keep its upload locked and every retry for that file waited behind it.
+function handleUpload(req: http.IncomingMessage, res: http.ServerResponse) {
+  const user = userFromCookieHeader(req.headers.cookie);
+  if (!user) return sendJson(res, 401, { error: 'Please sign in' });
+  if (user.role !== 'admin') return sendJson(res, 403, { error: 'Admins only' });
+  const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host;
+  if (isCrossOrigin(req.method ?? 'GET', req.headers.origin, host)) return sendJson(res, 403, { error: 'Cross-origin request blocked' });
+  tus.handle(req, res).catch((err) => {
+    console.error('  upload handler failed:', err);
+    if (!res.headersSent) sendJson(res, 500, { error: 'Upload failed on the server' });
+    else res.destroy();
+  });
+}
+
+const server = http.createServer((req, res) => {
+  const path = req.url?.split('?')[0] ?? '';
+  if (path === '/api/uploads' || path.startsWith('/api/uploads/')) return handleUpload(req, res);
+  honoListener(req, res);
 });
 
 // Node closes requests that take longer than 5 minutes by default. An upload piece on a slow
 // connection can take longer than that, so only the header timeout stays.
-if ('requestTimeout' in server) {
-  server.requestTimeout = 0;
-  server.keepAliveTimeout = 65_000;
-}
+server.requestTimeout = 0;
+server.keepAliveTimeout = 65_000;
+
+server.listen(config.port, () => {
+  console.log(`  Bellhop is ready on http://localhost:${config.port}`);
+  console.log(`  library:  ${config.mediaDir}\n  incoming: ${config.incomingDir}\n  data:     ${config.dataDir}`);
+});

@@ -48,7 +48,16 @@ export function endSession(c: Context) {
 }
 
 export function userFromCookie(c: Context): User | undefined {
-  const token = getCookie(c, COOKIE);
+  return userFromToken(getCookie(c, COOKIE));
+}
+
+/** Same lookup from a raw Cookie header, for requests handled outside Hono (uploads). */
+export function userFromCookieHeader(header: string | undefined): User | undefined {
+  const pair = header?.split(';').map((p) => p.trim()).find((p) => p.startsWith(`${COOKIE}=`));
+  return userFromToken(pair ? decodeURIComponent(pair.slice(COOKIE.length + 1)) : undefined);
+}
+
+function userFromToken(token: string | undefined): User | undefined {
   if (!token) return;
   return one<User>(
     `SELECT u.id, u.username, u.role FROM sessions s JOIN users u ON u.id = s.user_id
@@ -74,13 +83,18 @@ export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
 };
 
 // Cookies are SameSite=Lax; on top of that, reject cross-origin writes outright.
+export function isCrossOrigin(method: string, origin: string | undefined, host: string | undefined): boolean {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method) || !origin || !host) return false;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
 export const sameOrigin: MiddlewareHandler = async (c, next) => {
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
-    const origin = c.req.header('origin');
-    const host = c.req.header('x-forwarded-host') ?? c.req.header('host');
-    if (origin && host && new URL(origin).host !== host) {
-      throw new HTTPException(403, { message: 'Cross-origin request blocked' });
-    }
+  if (isCrossOrigin(c.req.method, c.req.header('origin'), c.req.header('x-forwarded-host') ?? c.req.header('host'))) {
+    throw new HTTPException(403, { message: 'Cross-origin request blocked' });
   }
   await next();
 };

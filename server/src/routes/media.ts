@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { FileStore } from '@tus/file-store';
-import { Server as TusServer } from '@tus/server';
+import { EVENTS, Server as TusServer } from '@tus/server';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { requireAdmin, type AppEnv } from '../auth.ts';
@@ -36,7 +36,24 @@ export const tus = new TusServer({
   datastore: store,
   relativeLocation: true,
   respectForwardedHeaders: true,
+  // Shows up in the container logs, so a stuck upload can be diagnosed from TrueNAS.
+  onResponseError: (req, err) => {
+    const status = 'status_code' in err ? err.status_code : 500;
+    const message = 'body' in err ? err.body.trim() : (err as Error).message;
+    if (message !== 'Request aborted due to lock acquired') {
+      console.warn(`  upload ${req.method} ${new URL(req.url).pathname.split('/').pop()}: ${status} ${message}`);
+    }
+    return undefined;
+  },
 });
+
+const mb = (n?: number) => (n == null ? '?' : `${(n / 1048576).toFixed(0)} MB`);
+tus.on(EVENTS.POST_CREATE, (_req, upload) =>
+  console.log(`  upload started: ${upload.metadata?.filename ?? upload.id} (${mb(upload.size)})`),
+);
+tus.on(EVENTS.POST_FINISH, (_req, _res, upload) =>
+  console.log(`  upload received: ${upload.metadata?.filename ?? upload.id} (${mb(upload.size)})`),
+);
 
 export function cleanupUploads() {
   tus.cleanUpExpiredUploads().catch(() => {});
