@@ -55,7 +55,14 @@ app.onError((err, c) => {
   return c.json({ error: 'Something went wrong on the server' }, 500);
 });
 
-serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
+const server = serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
   console.log(`  Bellhop is ready on http://localhost:${port}`);
   console.log(`  library:  ${config.mediaDir}\n  incoming: ${config.incomingDir}\n  data:     ${config.dataDir}`);
 });
+
+// Node closes requests that take longer than 5 minutes by default. An upload piece on a slow
+// connection can take longer than that, so only the header timeout stays.
+if ('requestTimeout' in server) {
+  server.requestTimeout = 0;
+  server.keepAliveTimeout = 65_000;
+}

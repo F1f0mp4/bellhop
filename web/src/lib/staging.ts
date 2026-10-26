@@ -18,7 +18,7 @@ export type StagedFile = {
   season?: number;
   episode?: number;
   episodeEnd?: number;
-  upload?: { state: UploadState; progress: number; error?: string };
+  upload?: { state: UploadState; progress: number; error?: string; stalls?: number };
   result?: { ok: boolean; to: string; error?: string };
 };
 
@@ -134,14 +134,25 @@ export function addEntries(entries: NewEntry[], opts: { forceType?: MediaType; t
   return added;
 }
 
+// Last time each running upload moved. A request can hang without failing (a proxy holding
+// the response, a dropped Wi-Fi link); the watchdog below restarts those, like pause + resume.
+const lastActivity = new Map<string, number>();
+const STALL_MS = 20_000;
+
 function createUpload(key: string, file: File) {
   const upload = new tus.Upload(file, {
     endpoint: '/api/uploads',
-    chunkSize: 50 * 1024 * 1024, // stays under reverse-proxy body limits (Cloudflare caps at 100 MB)
-    retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+    // Small pieces: each request finishes quickly, so proxies and timeouts rarely get in the way,
+    // and a restart only re-sends a few MB.
+    chunkSize: 16 * 1024 * 1024,
+    retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000],
     metadata: { filename: file.name, filetype: file.type },
     removeFingerprintOnSuccess: true,
-    onProgress: (sent, total) => patchUpload(key, { progress: total ? sent / total : 0 }),
+    onProgress: (sent, total) => {
+      lastActivity.set(key, Date.now());
+      patchUpload(key, { progress: total ? sent / total : 0 });
+    },
+    onChunkComplete: () => lastActivity.set(key, Date.now()),
     onSuccess: () => {
       patchFile(key, { ref: upload.url!.split('/').pop(), upload: { state: 'done', progress: 1 } });
       pump();
@@ -163,12 +174,28 @@ function pump() {
     const u = uploads.get(f.key);
     if (!u) continue;
     patchUpload(f.key, { state: 'uploading' });
+    lastActivity.set(f.key, Date.now());
     u.findPreviousUploads().then((prev) => {
       if (prev.length) u.resumeFromPreviousUpload(prev[0]);
       u.start();
     });
   }
 }
+
+setInterval(() => {
+  const now = Date.now();
+  for (const f of state.files) {
+    if (f.upload?.state !== 'uploading') continue;
+    const u = uploads.get(f.key);
+    if (!u || now - (lastActivity.get(f.key) ?? now) < STALL_MS) continue;
+    lastActivity.set(f.key, now);
+    patchUpload(f.key, { stalls: (f.upload.stalls ?? 0) + 1 });
+    // abort() cancels the hung request; start() asks the server how much it has and carries on.
+    u.abort().then(() => {
+      if (state.files.find((x) => x.key === f.key)?.upload?.state === 'uploading') u.start();
+    });
+  }
+}, 5000);
 
 export function pauseUpload(key: string) {
   uploads.get(key)?.abort();

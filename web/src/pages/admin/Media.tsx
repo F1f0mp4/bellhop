@@ -593,7 +593,10 @@ function FileRow({ file: f, meta, dirs, series }: { file: StagedFile; meta: Meta
                 style={{ width: `${Math.round(up.progress * 100)}%` }}
               />
             </div>
-            <span className="w-16 text-right text-xs text-muted tabular-nums" title={up.error}>
+            <span
+              className="w-16 text-right text-xs text-muted tabular-nums"
+              title={up.error ?? (up.stalls ? `The connection stalled ${up.stalls}× and Bellhop picked up where it left off` : undefined)}
+            >
               {up.state === 'done' ? bytes(f.size) : up.state === 'error' ? 'failed' : up.state === 'queued' ? 'waiting' : `${Math.floor(up.progress * 100)}%`}
             </span>
             {up.state === 'uploading' && (
