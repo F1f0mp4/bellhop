@@ -13,4 +13,7 @@ services:
     volumes:
       - ./data:/data # bellhop.db (tickets, users, settings) lives here
       - /mnt/media:/media # the folder that holds Movies/, Shows/, Music/
-      - /mnt/downloads:/incoming # optional: your downloads folder, to sort from
+      # Optional downloads folder to sort from. A separate mount works, but files get copied;
+      # for instant hard links, keep downloads inside /mnt/media and set INCOMING_DIR instead:
+      #   INCOMING_DIR: /media/Downloads
+      - /mnt/downloads:/incoming

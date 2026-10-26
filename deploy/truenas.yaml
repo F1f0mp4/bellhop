@@ -1,0 +1,24 @@
+# TrueNAS SCALE: Apps -> Discover Apps -> ⋮ -> Install via YAML
+# Create the dataset Main/bellhop first (it holds bellhop.db).
+services:
+  bellhop:
+    container_name: bellhop
+    image: ghcr.io/f1f0mp4/bellhop:latest
+    environment:
+      - PUID=3000 # same user as Soundify, so both can write the Jellyfin dataset
+      - PGID=3001
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=change-me # only used on first start; change it in the app afterwards
+      # Folder names inside /media; match your Jellyfin libraries
+      - MOVIES_DIR=Movies
+      - SHOWS_DIR=Shows
+      - MUSIC_DIR=Music
+      # Optional: a downloads folder to sort from. It must sit inside the /media mount:
+      # Linux can't hard-link or move instantly between two separate mounts.
+      # - INCOMING_DIR=/media/Downloads
+    ports:
+      - '8090:8080'
+    restart: unless-stopped
+    volumes:
+      - /mnt/Main/bellhop/data:/data
+      - /mnt/Main/JellyfinDataset:/media

@@ -83,8 +83,23 @@ or a page reload. They're staged in `/media/.bellhop-tmp`, so the final move is 
 uploads are cleaned up after 7 days.
 
 **Incoming:** with **Keep originals** on (the default), files are hard-linked into the library, so
-torrents keep seeding and no extra space is used. If `/incoming` and `/media` are on different disks,
-hard links aren't possible and Bellhop copies instead. Turn it off to move files.
+torrents keep seeding and no extra space is used. Turn it off to move files instead.
+
+Hard links and instant moves only work within one mount. If downloads are mounted separately as
+`/incoming`, Bellhop copies (and uses double the space while seeding). For instant imports, put the
+downloads folder inside the media folder and point Bellhop at it with `INCOMING_DIR=/media/Downloads`
+instead of a second mount.
+
+## TrueNAS SCALE
+
+Images are published to `ghcr.io/f1f0mp4/bellhop` on every push to `main`
+([.github/workflows/cd.yaml](.github/workflows/cd.yaml)).
+
+1. Create a dataset `Main/bellhop` for the database.
+2. **Apps → Discover Apps → ⋮ → Install via YAML** and paste [deploy/truenas.yaml](deploy/truenas.yaml).
+3. Adjust `PUID`/`PGID` to a user that can write your media dataset, and set `ADMIN_PASSWORD`.
+
+To update, use the app's **Update** button, or **Edit → Save** to pull `latest` again.
 
 ## Behind a reverse proxy
 
