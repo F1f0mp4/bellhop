@@ -1,0 +1,178 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource/instrument-serif';
+@import '@fontsource/instrument-serif/400-italic.css';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --line: #e3e0d9;
+  --text: #1c1b18;
+  --muted: #6e6a62;
+  --accent: #a96f12;
+  --accent-soft: #f6e8cf;
+  --accent-fg: #ffffff;
+  --ring: #c98a22;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #0e0f11;
+  --surface: #16171a;
+  --surface-2: #1e2024;
+  --line: #2a2c31;
+  --text: #edebe7;
+  --muted: #9a968e;
+  --accent: #e3ab4c;
+  --accent-soft: #2e2516;
+  --accent-fg: #1b1408;
+  --ring: #e3ab4c;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-ring: var(--ring);
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Instrument Serif', ui-serif, Georgia, serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(2px);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.animate-rise {
+  animation: rise 0.25s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Wiki pages: typography plugin, coloured from the theme tokens so both themes just work. */
+.prose-bellhop {
+  --tw-prose-body: var(--text);
+  --tw-prose-headings: var(--text);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--text);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--muted);
+  --tw-prose-hr: var(--line);
+  --tw-prose-quotes: var(--text);
+  --tw-prose-quote-borders: var(--accent);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--text);
+  --tw-prose-pre-code: var(--text);
+  --tw-prose-pre-bg: var(--surface-2);
+  --tw-prose-th-borders: var(--line);
+  --tw-prose-td-borders: var(--line);
+  line-height: 1.7;
+}
+
+.prose-bellhop :where(h1, h2, h3) {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.prose-bellhop :where(a) {
+  text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.prose-bellhop :where(a.missing) {
+  color: var(--muted);
+  text-decoration-style: dashed;
+}
+
+.prose-bellhop :where(:not(pre) > code) {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  padding: 0.1em 0.4em;
+  font-weight: 500;
+}
+
+.prose-bellhop :where(:not(pre) > code)::before,
+.prose-bellhop :where(:not(pre) > code)::after {
+  content: none;
+}
+
+.prose-bellhop :where(pre) {
+  border: 1px solid var(--line);
+}
+
+.prose-bellhop :where(blockquote) {
+  font-style: normal;
+  background: var(--accent-soft);
+  border-radius: 0 0.5rem 0.5rem 0;
+  padding: 0.5em 1em;
+}
+
+.prose-bellhop :where(blockquote p)::before,
+.prose-bellhop :where(blockquote p)::after {
+  content: none;
+}
+
+.prose-bellhop :where(input[type='checkbox']) {
+  accent-color: var(--accent);
+  margin-right: 0.4em;
+}
+
+.prose-bellhop :where(li:has(> input[type='checkbox'])) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+/* Wide tables scroll sideways instead of stretching the page on phones. */
+.prose-bellhop :where(table) {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}

@@ -1,0 +1,16 @@
+services:
+  bellhop:
+    build: .
+    image: bellhop:latest
+    container_name: bellhop
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      PUID: 1000 # run `id` on the host to find yours
+      PGID: 1000
+    volumes:
+      - ./data:/data # bellhop.db (tickets, users, settings) lives here
+      - /mnt/media:/media # the folder that holds Movies/, Shows/, Music/
+      - /mnt/downloads:/incoming # optional: your downloads folder, to sort from
