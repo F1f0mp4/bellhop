@@ -58,6 +58,27 @@ function sendJson(res: http.ServerResponse, status: number, body: object) {
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 }
 
+// Normal pieces stay quiet. A slow or cut-off one says where the time went: a long "receiving" points
+// at the network or a disk that can't keep up, a long "saving" at the disk or a proxy holding the data.
+const SLOW_PIECE_MS = 5000;
+
+function logSlowPiece(req: http.IncomingMessage, res: http.ServerResponse) {
+  const start = Date.now();
+  let received: number | undefined;
+  req.once('end', () => (received = Date.now()));
+  res.once('close', () => {
+    const now = Date.now();
+    // A dropped client still gets a tidy response from tus, so the unfinished body is the real sign.
+    const finished = res.writableFinished && received !== undefined;
+    if (finished && now - start < SLOW_PIECE_MS) return;
+    const id = req.url?.split('/').pop()?.split('?')[0];
+    const mb = (Number(req.headers['content-length'] ?? 0) / 1048576).toFixed(0);
+    const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+    const timing = received ? `receiving ${secs(received - start)}, saving ${secs(now - received)}` : `after ${secs(now - start)}`;
+    console.log(`  upload ${id}: ${finished ? 'slow' : 'interrupted'} ${mb} MB piece at ${req.headers['upload-offset']} (${timing}, status ${res.statusCode})`);
+  });
+}
+
 // Resumable uploads (tus protocol) go straight to tus's Node handler on the raw request.
 // Converting them to web streams first hid client disconnects from tus, so an interrupted
 // piece could keep its upload locked and every retry for that file waited behind it.
@@ -67,6 +88,7 @@ function handleUpload(req: http.IncomingMessage, res: http.ServerResponse) {
   if (user.role !== 'admin') return sendJson(res, 403, { error: 'Admins only' });
   const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host;
   if (isCrossOrigin(req.method ?? 'GET', req.headers.origin, host)) return sendJson(res, 403, { error: 'Cross-origin request blocked' });
+  if (req.method === 'PATCH') logSlowPiece(req, res);
   tus.handle(req, res).catch((err) => {
     console.error('  upload handler failed:', err);
     if (!res.headersSent) sendJson(res, 500, { error: 'Upload failed on the server' });

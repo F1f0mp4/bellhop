@@ -23,6 +23,7 @@ export type StagedFile = {
     progress: number;
     error?: string;
     stalls?: number;
+    saving?: boolean; // the current piece is fully sent and the server hasn't confirmed it yet
     speed?: number; // bytes per second, averaged over the last few seconds
     eta?: number; // seconds left at that speed
   };
@@ -146,6 +147,13 @@ export function addEntries(entries: NewEntry[], opts: { forceType?: MediaType; t
 const lastActivity = new Map<string, number>();
 const STALL_MS = 20_000;
 
+// Once a whole piece is sent, silence only means the server (or a proxy in front of it) is still
+// writing it. Restarting then throws away the piece and sends it again, so a slow disk would never
+// finish one. Give it far longer before deciding the request is really gone.
+const SAVE_MS = 5 * 60_000;
+const CHUNK_SIZE = 16 * 1024 * 1024;
+const pieceEnd = new Map<string, number>();
+
 // Recent [time, bytes sent] points per upload, for a speed that doesn't jump around.
 const samples = new Map<string, [number, number][]>();
 const SPEED_WINDOW_MS = 8_000;
@@ -170,15 +178,25 @@ function createUpload(key: string, file: File) {
     endpoint: '/api/uploads',
     // Small pieces: each request finishes quickly, so proxies and timeouts rarely get in the way,
     // and a restart only re-sends a few MB.
-    chunkSize: 16 * 1024 * 1024,
+    chunkSize: CHUNK_SIZE,
     retryDelays: [0, 1000, 3000, 5000, 10000, 20000, 30000],
     metadata: { filename: file.name, filetype: file.type },
     removeFingerprintOnSuccess: true,
+    onBeforeRequest: (req) => {
+      const offset = req.getMethod() === 'PATCH' ? Number(req.getHeader('Upload-Offset')) : NaN;
+      if (Number.isNaN(offset)) pieceEnd.delete(key);
+      else pieceEnd.set(key, Math.min(offset + CHUNK_SIZE, file.size));
+      patchUpload(key, { saving: false });
+    },
     onProgress: (sent, total) => {
       lastActivity.set(key, Date.now());
-      patchUpload(key, { progress: total ? sent / total : 0, ...trackSpeed(key, sent, total) });
+      const end = pieceEnd.get(key);
+      patchUpload(key, { progress: total ? sent / total : 0, saving: end != null && sent >= end, ...trackSpeed(key, sent, total) });
     },
-    onChunkComplete: () => lastActivity.set(key, Date.now()),
+    onChunkComplete: () => {
+      lastActivity.set(key, Date.now());
+      patchUpload(key, { saving: false });
+    },
     onSuccess: () => {
       samples.delete(key);
       patchFile(key, { ref: upload.url!.split('/').pop(), upload: { state: 'done', progress: 1 } });
@@ -220,7 +238,7 @@ setInterval(() => {
       samples.delete(f.key);
       patchUpload(f.key, { speed: 0, eta: undefined });
     }
-    if (!u || idle < STALL_MS) continue;
+    if (!u || idle < (f.upload.saving ? SAVE_MS : STALL_MS)) continue;
     lastActivity.set(f.key, now);
     patchUpload(f.key, { stalls: (f.upload.stalls ?? 0) + 1 });
     // abort() cancels the hung request; start() asks the server how much it has and carries on.

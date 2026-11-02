@@ -640,7 +640,8 @@ function UploadStatus({ file: f }: { file: StagedFile }) {
   if (up.state === 'queued') return <span className="ml-auto">waiting</span>;
   const pct = `${Math.floor(up.progress * 100)}%`;
   if (up.state === 'paused') return <><span>{pct}</span><span>paused</span></>;
-  if (up.speed === 0) return <><span>{pct}</span><span className="text-amber-600 dark:text-amber-300">stalled, reconnecting…</span></>;
+  if (up.saving) return <><span>{pct}</span><span>saving on the server…</span></>;
+  if (up.speed === 0) return <><span>{pct}</span><span className="text-amber-600 dark:text-amber-300">no progress, retrying soon…</span></>;
   return (
     <>
       <span>{pct}</span>
