@@ -11,6 +11,7 @@ import { authRoutes } from './routes/auth.ts';
 import { cleanupUploads, mediaRoutes, tus } from './routes/media.ts';
 import { serviceRoutes } from './routes/services.ts';
 import { lookupRoutes, settingsRoutes } from './routes/settings.ts';
+import { speedTestRoutes } from './routes/speedtest.ts';
 import { ticketRoutes } from './routes/tickets.ts';
 import { userRoutes } from './routes/users.ts';
 import { wikiRoutes } from './routes/wiki.ts';
@@ -32,6 +33,7 @@ app.route('/api/settings', settingsRoutes);
 app.route('/api/lookup', lookupRoutes);
 app.route('/api/media', mediaRoutes);
 app.route('/api/services', serviceRoutes);
+app.route('/api/speedtest', speedTestRoutes);
 app.route('/api/wiki', wikiRoutes);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

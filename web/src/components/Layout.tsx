@@ -21,6 +21,7 @@ const adminLinks = [
   { to: '/admin/media', label: 'Media' },
   { to: '/wiki', label: 'Wiki' },
   { to: '/admin/users', label: 'Users' },
+  { to: '/admin/speedtest', label: 'Speed test' },
   { to: '/admin/settings', label: 'Settings' },
 ];
 

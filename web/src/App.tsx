@@ -15,6 +15,7 @@ import { NewTicket } from './pages/user/NewTicket.tsx';
 const Board = lazy(() => import('./pages/admin/Board.tsx').then((m) => ({ default: m.Board })));
 const Links = lazy(() => import('./pages/admin/Links.tsx').then((m) => ({ default: m.Links })));
 const Media = lazy(() => import('./pages/admin/Media.tsx').then((m) => ({ default: m.Media })));
+const SpeedTest = lazy(() => import('./pages/admin/SpeedTest.tsx').then((m) => ({ default: m.SpeedTest })));
 const WikiIndex = lazy(() => import('./pages/wiki/Wiki.tsx').then((m) => ({ default: m.WikiIndex })));
 const WikiView = lazy(() => import('./pages/wiki/Wiki.tsx').then((m) => ({ default: m.WikiView })));
 const WikiEdit = lazy(() => import('./pages/wiki/WikiEdit.tsx').then((m) => ({ default: m.WikiEdit })));
@@ -60,6 +61,7 @@ const router = createBrowserRouter([
       { path: '/admin/media', element: admin(<Media />) },
       { path: '/admin/links', element: admin(<Links />) },
       { path: '/admin/users', element: admin(<Users />) },
+      { path: '/admin/speedtest', element: admin(<SpeedTest />) },
       { path: '/admin/settings', element: admin(<Settings />) },
       { path: '*', element: <Home /> },
     ],
