@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/auth.tsx';
 import { ago, cx } from '../../lib/format.ts';
 import { useFetch } from '../../lib/useFetch.ts';
 
-type Row = { id: number; username: string; role: 'user' | 'admin'; disabled: number; created_at: string; ticket_count: number };
+type Row = { id: number; username: string; role: 'user' | 'admin'; disabled: number; created_at: string; last_seen_at: string | null; ticket_count: number };
 
 export function Users() {
   const { user: me } = useAuth();
@@ -56,7 +56,7 @@ export function Users() {
                   {u.disabled ? <span className="text-xs text-rose-500">disabled</span> : null}
                 </div>
                 <div className="text-xs text-muted">
-                  {u.ticket_count} request{u.ticket_count === 1 ? '' : 's'} · joined {ago(u.created_at)}
+                  {u.ticket_count} request{u.ticket_count === 1 ? '' : 's'} · {u.last_seen_at ? `last seen ${ago(u.last_seen_at)}` : 'not seen yet'}
                 </div>
               </div>
               <div className="flex gap-1">

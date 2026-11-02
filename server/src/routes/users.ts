@@ -10,7 +10,7 @@ const activeAdmins = () =>
 
 userRoutes.get('/', (c) =>
   c.json(
-    all(`SELECT u.id, u.username, u.role, u.disabled, u.created_at,
+    all(`SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_seen_at,
            (SELECT COUNT(*) FROM tickets t WHERE t.user_id = u.id) AS ticket_count
          FROM users u ORDER BY u.username`),
   ),

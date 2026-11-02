@@ -59,11 +59,25 @@ export function userFromCookieHeader(header: string | undefined): User | undefin
 
 function userFromToken(token: string | undefined): User | undefined {
   if (!token) return;
-  return one<User>(
+  const user = one<User>(
     `SELECT u.id, u.username, u.role FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > ? AND u.disabled = 0`,
     sha256(token),
     new Date().toISOString(),
+  );
+  if (user) touchLastSeen(user.id);
+  return user;
+}
+
+// Sessions last 30 days, so a sign-in time alone would go stale for people who use the app daily.
+// Written at most once a minute per user.
+function touchLastSeen(userId: number) {
+  const t = Date.now();
+  run(
+    'UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)',
+    new Date(t).toISOString(),
+    userId,
+    new Date(t - 60e3).toISOString(),
   );
 }
 

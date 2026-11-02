@@ -9,6 +9,11 @@ export const db = new DatabaseSync(path.join(config.dataDir, 'bellhop.db'));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
 db.exec(fs.readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
 
+// schema.sql can't add columns to a table an older version already created.
+if (!db.prepare('PRAGMA table_info(users)').all().some((c: any) => c.name === 'last_seen_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
+}
+
 type Row = Record<string, any>;
 
 export const one = <T = Row>(sql: string, ...params: any[]) =>
