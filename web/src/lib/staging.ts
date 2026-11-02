@@ -173,9 +173,23 @@ function trackSpeed(key: string, sent: number, total: number) {
   return { speed, eta: speed > 0 ? (total - sent) / speed : undefined };
 }
 
+// Reads each piece into memory before sending it, instead of handing the browser a slice of the
+// file on disk. Same bytes on the wire, and at most one piece per running upload is held in memory.
+const memoryPieces = {
+  openFile: async (file: File) => ({
+    size: file.size,
+    slice: async (start: number, end: number) => ({
+      value: new Blob([await file.slice(start, end).arrayBuffer()]),
+      done: end >= file.size,
+    }),
+    close() {},
+  }),
+};
+
 function createUpload(key: string, file: File) {
   const upload = new tus.Upload(file, {
     endpoint: '/api/uploads',
+    fileReader: memoryPieces,
     // Small pieces: each request finishes quickly, so proxies and timeouts rarely get in the way,
     // and a restart only re-sends a few MB.
     chunkSize: CHUNK_SIZE,
