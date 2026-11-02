@@ -8,6 +8,8 @@ import { Launcher } from './Launcher.tsx';
 import { useToast } from './Toast.tsx';
 import { Button, Dialog, Field, Input, Spinner } from './ui.tsx';
 
+declare const __APP_VERSION__: string;
+
 const userLinks = [
   { to: '/new', label: 'New request' },
   { to: '/requests', label: 'My requests' },
@@ -122,6 +124,7 @@ export function Layout() {
           <Outlet />
         </Suspense>
       </main>
+      <footer className="mx-auto max-w-6xl px-4 pb-6 text-xs text-muted">Bellhop {__APP_VERSION__}</footer>
       <PasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
     </div>
   );

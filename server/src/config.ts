@@ -3,6 +3,7 @@ import path from 'node:path';
 const env = process.env;
 
 export const config = {
+  version: env.APP_VERSION ?? 'dev',
   port: Number(env.PORT ?? 8080),
   dataDir: path.resolve(env.DATA_DIR ?? './data'),
   mediaDir: path.resolve(env.MEDIA_DIR ?? './data/media'),

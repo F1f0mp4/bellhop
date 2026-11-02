@@ -62,9 +62,15 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+      # The tag on a release, otherwise the build date and commit: 2026-11-02-5b8db1f
+      - id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then echo "value=$GITHUB_REF_NAME"
+          else echo "value=$(date -u +%F)-${GITHUB_SHA::7}"; fi >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v7
         with:
           context: .
+          build-args: APP_VERSION=${{ steps.version.outputs.value }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

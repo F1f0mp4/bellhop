@@ -108,6 +108,6 @@ server.requestTimeout = 0;
 server.keepAliveTimeout = 65_000;
 
 server.listen(config.port, () => {
-  console.log(`  Bellhop is ready on http://localhost:${config.port}`);
+  console.log(`  Bellhop ${config.version} is ready on http://localhost:${config.port}`);
   console.log(`  library:  ${config.mediaDir}\n  incoming: ${config.incomingDir}\n  data:     ${config.dataDir}`);
 });

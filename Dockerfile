@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 RUN npm run build
 
 # --- runtime: Node runs the TypeScript server directly, no compile step ---
@@ -21,6 +23,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY --from=build /app/web/dist ./web/dist
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 8080

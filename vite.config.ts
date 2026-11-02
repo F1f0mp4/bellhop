@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: 'web',
+  define: { __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? 'dev') },
   plugins: [react(), tailwindcss()],
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
