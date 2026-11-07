@@ -77,25 +77,6 @@ which `uid:gid`.
 The **Media** page has three parts: upload from the browser, sort from the incoming folder, and browse
 the library.
 
-### Apps
-
-**Apps** is an App Store-style page of open source apps for the household: LocalSend, Jellyfin,
-Prism Launcher, VLC, KeePassXC and about twenty more come preinstalled. Each app gets a **Get**
-button for the device you're on (App Store, Google Play, the website, or the installer itself).
-
-- **Always current:** a download can be a file pattern such as `LocalSend-*.dmg`, matched against
-  the app's latest GitHub release. Bellhop checks for new releases every 12 hours.
-- **Kept in the house:** tick **Keep a copy on this server** and the installer downloads to
-  `data/apps/files`, so people get it over the LAN. You can also upload your own files.
-- **iPhone and iPad:** `.ipa` files are always kept, and listed in an AltStore/SideStore source.
-  Phones add it with one tap from the Apps page. The address has a secret in it, because phones
-  can't sign in. **Manage apps** can make a new one if it leaks.
-- Icons are found automatically from the App Store, the app's website or its GitHub organisation.
-- GitHub allows 60 release checks an hour without a token. Add a token with no permissions in
-  **Settings** (or `GITHUB_TOKEN`) if you add lots of apps.
-
-Manage it all under **Apps → Manage**. Removed starter apps stay removed; get them back from **Starter list**.
-
 ## How files are named
 
 Bellhop follows Jellyfin's naming guide:
