@@ -277,11 +277,11 @@ mediaRoutes.post('/library/rename', async (c) => {
   return c.json({ ok: true, path: toRel(config.mediaDir, dst) });
 });
 
-// EPERM on Linux means the file itself refuses, which is how a file "Locked" in Finder (or marked
-// read-only over SMB) shows up. EACCES means the folder isn't writable for the user Bellhop runs as.
+// ZFS answers EPERM, not EACCES, when the folder holding a file isn't writable for this user, e.g. a
+// folder Jellyfin created with 755. A locked (immutable) file gives EPERM too, but that's the rare case.
 const FS_REASONS: Record<string, () => string> = {
-  EPERM: () => 'it is locked or read-only (in Finder: Get Info, untick Locked)',
-  EACCES: () => `no permission as user ${runAs()}`,
+  EPERM: () => `user ${runAs()} isn't allowed to change the folder it's in (check its owner and permissions, or whether it's locked)`,
+  EACCES: () => `user ${runAs()} isn't allowed to change the folder it's in`,
   EBUSY: () => 'it is in use',
   EROFS: () => 'the disk is read-only',
 };
