@@ -61,5 +61,17 @@ export type Service = {
   health: Health | null;
 };
 
-export type WikiSummary = { slug: string; title: string; updated_at: string; excerpt: string };
-export type WikiPage = { id: number; slug: string; title: string; body: string; created_at: string; updated_at: string; updated_by: string | null };
+export type WikiSummary = { slug: string; title: string; category: string; updated_at: string; excerpt: string; created_by: string | null };
+export type WikiPage = {
+  id: number;
+  slug: string;
+  title: string;
+  body: string;
+  /** Empty when the page has none. */
+  category: string;
+  created_at: string;
+  updated_at: string;
+  /** Usernames; null once that account is deleted. */
+  created_by: string | null;
+  updated_by: string | null;
+};

@@ -12,8 +12,15 @@ db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_k
 db.exec(fs.readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
 
 // schema.sql can't add columns to a table an older version already created.
-if (!db.prepare('PRAGMA table_info(users)').all().some((c: any) => c.name === 'last_seen_at')) {
-  db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
+const hasColumn = (table: string, column: string) =>
+  db.prepare(`PRAGMA table_info(${table})`).all().some((c: any) => c.name === column);
+
+if (!hasColumn('users', 'last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
+if (!hasColumn('wiki_pages', 'category')) db.exec("ALTER TABLE wiki_pages ADD COLUMN category TEXT NOT NULL DEFAULT ''");
+if (!hasColumn('wiki_pages', 'created_by')) {
+  // Who created older pages was never kept; their last editor is the best guess.
+  db.exec(`ALTER TABLE wiki_pages ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+           UPDATE wiki_pages SET created_by = updated_by;`);
 }
 
 type Row = Record<string, any>;

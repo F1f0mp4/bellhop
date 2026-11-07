@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
   slug       TEXT    NOT NULL UNIQUE,
   title      TEXT    NOT NULL,
   body       TEXT    NOT NULL DEFAULT '',
+  category   TEXT    NOT NULL DEFAULT '',
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

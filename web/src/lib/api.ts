@@ -7,11 +7,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  // A file goes up as the raw body; anything else as JSON.
+  const file = body instanceof Blob ? body : undefined;
   const res = await fetch(`/api${url}`, {
     method,
     credentials: 'same-origin',
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined ? undefined : { 'content-type': file ? file.type || 'application/octet-stream' : 'application/json' },
+    body: body === undefined ? undefined : (file ?? JSON.stringify(body)),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -27,4 +29,5 @@ export const api = {
   put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),
   patch: <T>(url: string, body: unknown) => request<T>('PATCH', url, body),
   del: <T>(url: string) => request<T>('DELETE', url),
+  upload: <T>(url: string, file: Blob) => request<T>('POST', url, file),
 };
