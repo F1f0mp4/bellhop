@@ -21,6 +21,7 @@ export const settingDefaults: Record<string, string> = {
   movies_dir: env.MOVIES_DIR ?? 'Movies',
   shows_dir: env.SHOWS_DIR ?? 'Shows',
   music_dir: env.MUSIC_DIR ?? 'Music',
+  github_token: env.GITHUB_TOKEN ?? '',
 };
 
-export const SECRET_SETTINGS = new Set(['jellyfin_key', 'tmdb_key']);
+export const SECRET_SETTINGS = new Set(['jellyfin_key', 'tmdb_key', 'github_token']);

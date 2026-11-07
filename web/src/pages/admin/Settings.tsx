@@ -9,6 +9,7 @@ type SettingsData = {
   jellyfin_url: string;
   has_jellyfin_key: boolean;
   has_tmdb_key: boolean;
+  has_github_token: boolean;
   movies_dir: string;
   shows_dir: string;
   music_dir: string;
@@ -22,7 +23,7 @@ export function Settings() {
   const notify = useToast();
   const { data, reload } = useFetch<SettingsData>('/settings');
   const { data: status } = useFetch<MediaStatus>('/media/status');
-  const [form, setForm] = useState({ jellyfin_url: '', jellyfin_key: '', tmdb_key: '', movies_dir: '', shows_dir: '', music_dir: '' });
+  const [form, setForm] = useState({ jellyfin_url: '', jellyfin_key: '', tmdb_key: '', github_token: '', movies_dir: '', shows_dir: '', music_dir: '' });
   const [busy, setBusy] = useState(false);
   const [jfTest, setJfTest] = useState<TestResult | null>(null);
   const [tmdbTest, setTmdbTest] = useState<TestResult | null>(null);
@@ -40,7 +41,7 @@ export function Settings() {
     setBusy(true);
     try {
       await api.put('/settings', form);
-      setForm((f) => ({ ...f, jellyfin_key: '', tmdb_key: '' }));
+      setForm((f) => ({ ...f, jellyfin_key: '', tmdb_key: '', github_token: '' }));
       notify('Settings saved');
       reload();
     } catch (err) {
@@ -99,6 +100,21 @@ export function Settings() {
             />
           </Field>
           <TestRow onTest={() => test('tmdb')} result={tmdbTest} />
+        </Section>
+
+        <Section
+          title="GitHub"
+          text="The Apps page checks GitHub for new releases. Without a token GitHub allows 60 lookups an hour; a token with no permissions at all raises that to 5,000."
+        >
+          <Field label="Personal access token" hint="github.com → Settings → Developer settings → Fine-grained tokens. Public repositories only, no permissions needed.">
+            <Input
+              type="password"
+              value={form.github_token}
+              onChange={set('github_token')}
+              placeholder={data.has_github_token ? '•••••••• saved, type to replace' : 'Optional'}
+              autoComplete="off"
+            />
+          </Field>
         </Section>
 
         <Section title="Library folders" text="Folder names inside your media folder. Match what your Jellyfin libraries point at.">

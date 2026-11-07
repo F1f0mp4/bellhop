@@ -7,6 +7,9 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { isCrossOrigin, sameOrigin, seedAdmin, userFromCookieHeader, type AppEnv } from './auth.ts';
 import { config } from './config.ts';
+import { seedStarterApps } from './apps/starter.ts';
+import { startAppUpdates } from './apps/updates.ts';
+import { appRoutes } from './routes/apps.ts';
 import { authRoutes } from './routes/auth.ts';
 import { cleanupUploads, mediaRoutes, startLibrarySizes, tus } from './routes/media.ts';
 import { serviceRoutes } from './routes/services.ts';
@@ -22,6 +25,8 @@ cleanupUploads();
 setInterval(cleanupUploads, 6 * 3600e3).unref();
 startHealthChecks();
 startLibrarySizes();
+seedStarterApps();
+startAppUpdates();
 
 const app = new Hono<AppEnv>();
 
@@ -36,6 +41,7 @@ app.route('/api/media', mediaRoutes);
 app.route('/api/services', serviceRoutes);
 app.route('/api/speedtest', speedTestRoutes);
 app.route('/api/wiki', wikiRoutes);
+app.route('/api/apps', appRoutes);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

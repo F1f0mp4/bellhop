@@ -71,6 +71,56 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
   updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- The Apps page: open source apps for the household, each with downloads per platform.
+CREATE TABLE IF NOT EXISTS apps (
+  id          INTEGER PRIMARY KEY,
+  slug        TEXT    NOT NULL UNIQUE,
+  name        TEXT    NOT NULL,
+  developer   TEXT    NOT NULL DEFAULT '',
+  subtitle    TEXT    NOT NULL DEFAULT '',
+  description TEXT    NOT NULL DEFAULT '',
+  category    TEXT    NOT NULL DEFAULT '',
+  repo        TEXT    NOT NULL DEFAULT '',   -- owner/name on GitHub, where release downloads come from
+  homepage    TEXT    NOT NULL DEFAULT '',
+  license     TEXT    NOT NULL DEFAULT '',
+  icon        TEXT    NOT NULL DEFAULT '',   -- stored file name in data/apps/icons
+  icon_url    TEXT    NOT NULL DEFAULT '',   -- where the icon comes from; empty = App Store, website or GitHub
+  tint        TEXT    NOT NULL DEFAULT '',   -- #rrggbb for the featured card and AltStore
+  featured    INTEGER NOT NULL DEFAULT 0,
+  starter     TEXT,                          -- key in the starter list, so it isn't offered twice
+  release_tag TEXT,
+  checked_at  TEXT,
+  check_error TEXT,
+  position    INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- One way to get an app on one platform: a link (App Store, website), a file from the app's latest
+-- GitHub release (optionally kept on this server), or a file an admin uploaded.
+CREATE TABLE IF NOT EXISTS app_downloads (
+  id             INTEGER PRIMARY KEY,
+  app_id         INTEGER NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+  platform       TEXT    NOT NULL CHECK (platform IN ('ios', 'android', 'macos', 'windows', 'linux')),
+  label          TEXT    NOT NULL DEFAULT '',
+  source         TEXT    NOT NULL DEFAULT 'link' CHECK (source IN ('link', 'release', 'upload')),
+  url            TEXT    NOT NULL DEFAULT '',   -- link: where Get goes
+  asset          TEXT    NOT NULL DEFAULT '',   -- release: file name pattern, e.g. *-arm64.dmg
+  keep           INTEGER NOT NULL DEFAULT 0,    -- release: keep a copy on this server
+  remote_url     TEXT,                          -- release: the matching file on GitHub
+  file           TEXT,                          -- stored copy, relative to data/apps/files
+  file_name      TEXT,
+  size           INTEGER,
+  version        TEXT,
+  released_at    TEXT,
+  sha256         TEXT,
+  ipa            TEXT,                          -- JSON read from an .ipa: bundle id, versions, permissions
+  error          TEXT,
+  position       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS app_downloads_app ON app_downloads(app_id);
+
 -- Settings edited in the admin UI. Environment variables are the fallback.
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,

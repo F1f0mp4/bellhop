@@ -16,6 +16,10 @@ const Board = lazy(() => import('./pages/admin/Board.tsx').then((m) => ({ defaul
 const Links = lazy(() => import('./pages/admin/Links.tsx').then((m) => ({ default: m.Links })));
 const Media = lazy(() => import('./pages/admin/Media.tsx').then((m) => ({ default: m.Media })));
 const SpeedTest = lazy(() => import('./pages/admin/SpeedTest.tsx').then((m) => ({ default: m.SpeedTest })));
+const Apps = lazy(() => import('./pages/apps/Apps.tsx').then((m) => ({ default: m.Apps })));
+const AppDetail = lazy(() => import('./pages/apps/AppDetail.tsx').then((m) => ({ default: m.AppDetail })));
+const AppsAdmin = lazy(() => import('./pages/admin/AppsAdmin.tsx').then((m) => ({ default: m.AppsAdmin })));
+const AppEditor = lazy(() => import('./pages/admin/AppEditor.tsx').then((m) => ({ default: m.AppEditor })));
 const WikiIndex = lazy(() => import('./pages/wiki/Wiki.tsx').then((m) => ({ default: m.WikiIndex })));
 const WikiView = lazy(() => import('./pages/wiki/Wiki.tsx').then((m) => ({ default: m.WikiView })));
 const WikiEdit = lazy(() => import('./pages/wiki/WikiEdit.tsx').then((m) => ({ default: m.WikiEdit })));
@@ -53,6 +57,8 @@ const router = createBrowserRouter([
       { path: '/new', element: <NewTicket /> },
       { path: '/requests', element: <MyTickets /> },
       { path: '/requests/:id', element: <TicketView /> },
+      { path: '/apps', element: <Apps /> },
+      { path: '/apps/:slug', element: <AppDetail /> },
       { path: '/wiki', element: <WikiIndex /> },
       { path: '/wiki/new', element: admin(<WikiEdit />) },
       { path: '/wiki/:slug', element: <WikiView /> },
@@ -60,6 +66,9 @@ const router = createBrowserRouter([
       { path: '/admin', element: admin(<Board />) },
       { path: '/admin/media', element: admin(<Media />) },
       { path: '/admin/links', element: admin(<Links />) },
+      { path: '/admin/apps', element: admin(<AppsAdmin />) },
+      { path: '/admin/apps/new', element: admin(<AppEditor key="new" />) },
+      { path: '/admin/apps/:id', element: admin(<AppEditor />) },
       { path: '/admin/users', element: admin(<Users />) },
       { path: '/admin/speedtest', element: admin(<SpeedTest />) },
       { path: '/admin/settings', element: admin(<Settings />) },

@@ -13,12 +13,14 @@ declare const __APP_VERSION__: string;
 const userLinks = [
   { to: '/new', label: 'New request' },
   { to: '/requests', label: 'My requests' },
+  { to: '/apps', label: 'Apps' },
   { to: '/wiki', label: 'Wiki' },
 ];
 
 const adminLinks = [
   { to: '/admin', label: 'Board', end: true },
   { to: '/admin/media', label: 'Media' },
+  { to: '/apps', label: 'Apps' },
   { to: '/wiki', label: 'Wiki' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/speedtest', label: 'Speed test' },
