@@ -6,7 +6,9 @@ import { config, settingDefaults } from './config.ts';
 fs.mkdirSync(config.dataDir, { recursive: true });
 
 export const db = new DatabaseSync(path.join(config.dataDir, 'bellhop.db'));
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+// The busy timeout goes first: switching a new database to WAL needs a lock, and another process
+// opening it at the same moment (the test files run in parallel) would otherwise fail straight away.
+db.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 db.exec(fs.readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
 
 // schema.sql can't add columns to a table an older version already created.
