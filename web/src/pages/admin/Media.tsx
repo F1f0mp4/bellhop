@@ -72,13 +72,13 @@ type CategoryStats = {
   exists: boolean;
   bytes: number | null;
   files: number | null;
+  tracks: number | null;
   folders: number | null;
   subfolders: number | null;
 };
 type WatchStats = {
   movies: { count: number; seconds: number };
   series: { count: number; episodes: number; seconds: number };
-  music: { albums: number; tracks: number; seconds: number };
 };
 type LibraryStats = {
   categories: CategoryStats[];
@@ -721,16 +721,20 @@ function usePollWhile(busy: boolean | undefined, reload: () => void, data: unkno
 const CATEGORY_TYPE = { movies: 'movie', shows: 'series', music: 'music' } as const;
 
 function categorySummary(c: CategoryStats, watch: WatchStats | null): string[] {
-  if (c.key === 'movies') {
-    if (watch) return [plural(watch.movies.count, 'movie'), `${hours(watch.movies.seconds)} of watch time`];
-    return c.folders == null ? [] : [plural(c.folders, 'movie')];
+  if (c.folders == null) return [];
+  // Music is served by Navidrome, so its counts always come from the folders: Artist/Album/track.
+  if (c.key === 'music') {
+    const lines = [[plural(c.folders, 'artist'), c.subfolders != null && plural(c.subfolders, 'album')].filter(Boolean).join(' · ')];
+    return c.tracks != null ? [...lines, plural(c.tracks, 'track')] : lines;
   }
-  if (c.key === 'shows') {
-    if (watch) return [`${plural(watch.series.count, 'series', 'series')} · ${plural(watch.series.episodes, 'episode')}`, `${hours(watch.series.seconds)} of watch time`];
-    return c.folders == null ? [] : [plural(c.folders, 'series', 'series')];
-  }
-  if (watch) return [`${plural(watch.music.albums, 'album')} · ${plural(watch.music.tracks, 'track')}`, `${hours(watch.music.seconds)} of listening`];
-  return c.folders == null ? [] : [[plural(c.folders, 'artist'), c.subfolders != null && plural(c.subfolders, 'album')].filter(Boolean).join(' · ')];
+  const time = (seconds: number) => (seconds > 0 ? [`${hours(seconds)} of watch time`] : []);
+  const movies = c.key === 'movies';
+  const folderCount = movies ? plural(c.folders, 'movie') : plural(c.folders, 'series', 'series');
+  const count = movies ? watch?.movies.count : watch?.series.count;
+  // Files on disk but nothing in Jellyfin: usually no library points at this folder, or it hasn't been scanned.
+  if (!watch || !count) return watch && c.files ? [folderCount, 'Not in Jellyfin yet'] : [folderCount];
+  if (movies) return [plural(watch.movies.count, 'movie'), ...time(watch.movies.seconds)];
+  return [`${plural(watch.series.count, 'series', 'series')} · ${plural(watch.series.episodes, 'episode')}`, ...time(watch.series.seconds)];
 }
 
 function LibrarySummary({ stats, onOpen }: { stats: LibraryStats; onOpen: (folder: string) => void }) {

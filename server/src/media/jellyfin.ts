@@ -35,16 +35,16 @@ export async function testJellyfin(url?: string, key?: string): Promise<Result> 
   return { ok: true, message: `Connected to ${info.ServerName ?? 'Jellyfin'} ${info.Version ?? ''}`.trim() };
 }
 
-/** Counts and play time per kind, straight from Jellyfin's own index. Times are in seconds. */
+/** Counts and play time for movies and shows, straight from Jellyfin's own index. Times are in seconds. */
 export type WatchStats = {
   movies: { count: number; seconds: number };
   series: { count: number; episodes: number; seconds: number };
-  music: { albums: number; tracks: number; seconds: number };
 };
 
 const TICKS_PER_SECOND = 1e7; // a tick is 100 ns
 
 export async function watchStats(url?: string, key?: string): Promise<{ ok: true; stats: WatchStats } | { ok: false; message: string }> {
+  // Music isn't asked for: it's served by Navidrome, not Jellyfin.
   // Every item of a type, without images or per-user data, so even a big library is a small answer.
   const query = async (type: string, countOnly = false) => {
     const q = new URLSearchParams({
@@ -66,19 +66,12 @@ export async function watchStats(url?: string, key?: string): Promise<{ ok: true
     };
   };
   try {
-    const [movies, series, episodes, albums, tracks] = await Promise.all([
-      query('Movie'),
-      query('Series', true),
-      query('Episode'),
-      query('MusicAlbum', true),
-      query('Audio'),
-    ]);
+    const [movies, series, episodes] = await Promise.all([query('Movie'), query('Series', true), query('Episode')]);
     return {
       ok: true,
       stats: {
         movies,
         series: { count: series.count, episodes: episodes.count, seconds: episodes.seconds },
-        music: { albums: albums.count, tracks: tracks.count, seconds: tracks.seconds },
       },
     };
   } catch (e) {

@@ -1,8 +1,12 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { kindOf } from './naming.ts';
 
-/** Totals for one folder, everything below it included. `folders` counts only its direct, visible subfolders. */
-export type DirSize = { bytes: number; files: number; folders: number };
+/**
+ * Totals for one folder, everything below it included. `audio` counts music files (tracks), and
+ * `folders` counts only its direct, visible subfolders.
+ */
+export type DirSize = { bytes: number; files: number; audio: number; folders: number };
 
 /**
  * Folder sizes for the library, kept in memory so browsing never has to walk the disk.
@@ -80,16 +84,14 @@ export class SizeIndex {
 
   /** Full walk of `dir`, recording every folder on the way back up. */
   private async walk(dir: string): Promise<DirSize> {
-    const total: DirSize = { bytes: 0, files: 0, folders: 0 };
+    const total: DirSize = { bytes: 0, files: 0, audio: 0, folders: 0 };
     const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
     const files: string[] = [];
     for (const e of entries) {
       if (this.skipped(dir, e.name)) continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        const sub = await this.walk(full);
-        total.bytes += sub.bytes;
-        total.files += sub.files;
+        add(total, await this.walk(full));
         if (!e.name.startsWith('.')) total.folders++;
       } else {
         files.push(full);
@@ -103,16 +105,14 @@ export class SizeIndex {
   /** Re-total `dir` and each parent from their own files plus the cached totals of their subfolders. */
   private async recomputeUp(dir: string) {
     for (let d = dir; this.inside(d); d = path.dirname(d)) {
-      const total: DirSize = { bytes: 0, files: 0, folders: 0 };
+      const total: DirSize = { bytes: 0, files: 0, audio: 0, folders: 0 };
       const entries = await fsp.readdir(d, { withFileTypes: true }).catch(() => []);
       const files: string[] = [];
       for (const e of entries) {
         if (this.skipped(d, e.name)) continue;
         const full = path.join(d, e.name);
         if (e.isDirectory()) {
-          const sub = this.sizes.get(full) ?? (await this.walk(full));
-          total.bytes += sub.bytes;
-          total.files += sub.files;
+          add(total, this.sizes.get(full) ?? (await this.walk(full)));
           if (!e.name.startsWith('.')) total.folders++;
         } else {
           files.push(full);
@@ -127,12 +127,20 @@ export class SizeIndex {
   // Symlinks count as themselves, never what they point to, so nothing is counted twice.
   private async addFiles(total: DirSize, files: string[]) {
     for (let i = 0; i < files.length; i += 64) {
-      const stats = await Promise.all(files.slice(i, i + 64).map((f) => fsp.lstat(f).catch(() => null)));
-      for (const st of stats) {
-        if (!st) continue;
+      const batch = files.slice(i, i + 64);
+      const stats = await Promise.all(batch.map((f) => fsp.lstat(f).catch(() => null)));
+      stats.forEach((st, j) => {
+        if (!st) return;
         total.bytes += st.size;
         total.files++;
-      }
+        if (kindOf(path.basename(batch[j])) === 'audio') total.audio++;
+      });
     }
   }
+}
+
+function add(total: DirSize, sub: DirSize) {
+  total.bytes += sub.bytes;
+  total.files += sub.files;
+  total.audio += sub.audio;
 }

@@ -23,20 +23,25 @@ function library() {
   put(path.join(show, 'Season 01', '1883 S01E01.trickplay', '320 - 10x10', '0.jpg'), 400);
   put(path.join(show, 'poster.jpg'), 5);
   put(path.join(root, 'Movies', 'Heat (1995)', 'Heat (1995).mkv'), 7000);
+  put(path.join(root, 'Music', 'Pink Floyd', 'Animals (1977)', '01 Pigs on the Wing.flac'), 100);
+  put(path.join(root, 'Music', 'Pink Floyd', 'Animals (1977)', '02 Dogs.flac'), 200);
+  put(path.join(root, 'Music', 'Pink Floyd', 'Animals (1977)', 'cover.jpg'), 10);
   put(path.join(root, '.bellhop-tmp', 'upload'), 99999);
-  return { root, show, shows: path.join(root, 'Shows'), movies: path.join(root, 'Movies') };
+  return { root, show, shows: path.join(root, 'Shows'), movies: path.join(root, 'Movies'), music: path.join(root, 'Music') };
 }
 
 test('one walk sizes every folder, hidden Jellyfin folders included', async () => {
-  const { root, show, shows } = library();
+  const { root, show, shows, music } = library();
   const idx = new SizeIndex(root, ['.bellhop-tmp']);
   await idx.rescanAll();
-  assert.deepEqual(idx.get(show), { bytes: 3435, files: 5, folders: 1 });
+  assert.deepEqual(idx.get(show), { bytes: 3435, files: 5, audio: 0, folders: 1 });
   // .chapters takes space but, being hidden, isn't counted as a subfolder; the .trickplay folder is visible.
-  assert.deepEqual(idx.get(path.join(show, 'Season 01')), { bytes: 3430, files: 4, folders: 1 });
-  assert.deepEqual(idx.get(shows), { bytes: 3435, files: 5, folders: 1 });
+  assert.deepEqual(idx.get(path.join(show, 'Season 01')), { bytes: 3430, files: 4, audio: 0, folders: 1 });
+  assert.deepEqual(idx.get(shows), { bytes: 3435, files: 5, audio: 0, folders: 1 });
+  // Audio files are counted as tracks; the cover isn't.
+  assert.deepEqual(idx.get(music), { bytes: 310, files: 3, audio: 2, folders: 1 });
   // The staging folder is left out of the root total.
-  assert.deepEqual(idx.get(root), { bytes: 10435, files: 6, folders: 2 });
+  assert.deepEqual(idx.get(root), { bytes: 10745, files: 9, audio: 2, folders: 3 });
   assert.ok(idx.scannedAt);
 });
 
@@ -48,8 +53,8 @@ test('an import refreshes the new folder and its parents without a full walk', a
   put(path.join(andor, 'Season 01', 'Andor S01E01.mkv'), 500);
   await idx.changed(andor);
   assert.equal(idx.get(andor)?.bytes, 500);
-  assert.deepEqual(idx.get(shows), { bytes: 3935, files: 6, folders: 2 });
-  assert.equal(idx.get(root)?.bytes, 10935);
+  assert.deepEqual(idx.get(shows), { bytes: 3935, files: 6, audio: 0, folders: 2 });
+  assert.equal(idx.get(root)?.bytes, 11245);
 });
 
 test('a delete drops the folder and its children from the cache', async () => {
@@ -60,8 +65,8 @@ test('a delete drops the folder and its children from the cache', async () => {
   await idx.changed(show);
   assert.equal(idx.get(show), undefined);
   assert.equal(idx.get(path.join(show, 'Season 01')), undefined);
-  assert.deepEqual(idx.get(shows), { bytes: 0, files: 0, folders: 0 });
-  assert.equal(idx.get(root)?.bytes, 7000);
+  assert.deepEqual(idx.get(shows), { bytes: 0, files: 0, audio: 0, folders: 0 });
+  assert.equal(idx.get(root)?.bytes, 7310);
 });
 
 test('a rename moves the size to the new name', async () => {
@@ -88,14 +93,12 @@ test('busy is true while a walk is queued and paths outside the root are ignored
   assert.equal(idx.get(path.join(os.tmpdir(), 'elsewhere')), undefined);
 });
 
-// A stand-in for Jellyfin's Items API: two movies, a series with two episodes (one with no runtime yet), an album.
+// A stand-in for Jellyfin's Items API: two movies and a series with two episodes (one with no runtime yet).
 const seen: string[] = [];
 const items: Record<string, { RunTimeTicks?: number | null }[]> = {
   Movie: [{ RunTimeTicks: 2 * 3600e7 }, { RunTimeTicks: 3600e7 }],
   Series: [{}],
   Episode: [{ RunTimeTicks: 45 * 60e7 }, { RunTimeTicks: null }],
-  MusicAlbum: [{}],
-  Audio: [{ RunTimeTicks: 180e7 }],
 };
 const jf = http.createServer((req, res) => {
   const url = new URL(req.url!, 'http://x');
@@ -120,10 +123,11 @@ test('adds up Jellyfin runtimes per kind', async () => {
     stats: {
       movies: { count: 2, seconds: 3 * 3600 },
       series: { count: 1, episodes: 2, seconds: 45 * 60 },
-      music: { albums: 1, tracks: 1, seconds: 180 },
     },
   });
   assert.ok(seen.includes('secret /Items?Episode'));
+  // Music lives in Navidrome, so Jellyfin is never asked about it.
+  assert.ok(!seen.some((s) => /Audio|MusicAlbum/.test(s)));
 });
 
 test('reports why Jellyfin numbers are missing', async () => {

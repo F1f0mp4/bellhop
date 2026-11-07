@@ -176,7 +176,8 @@ mediaRoutes.get('/browse', async (c) => {
   return c.json({ path: toRel(root, dir), entries: out, sizing: root === config.mediaDir && sizes.busy });
 });
 
-// One summary per library folder: disk use from the size cache, counts and play time from Jellyfin.
+// One summary per library folder: disk use and music counts from the size cache, counts and play
+// time for movies and shows from Jellyfin.
 mediaRoutes.get('/stats', async (c) => {
   const jellyfinOn = Boolean(getSetting('jellyfin_url') && getSetting('jellyfin_key'));
   const categories = await Promise.all(
@@ -197,6 +198,7 @@ mediaRoutes.get('/stats', async (c) => {
         exists: await exists(dir),
         bytes: size?.bytes ?? null,
         files: size?.files ?? null,
+        tracks: size?.audio ?? null,
         folders: size?.folders ?? null,
         subfolders,
       };
