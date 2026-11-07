@@ -21,7 +21,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { buildTarget, kindOf, validateMeta, type Dirs, type MediaType, type Meta } from '../../../../server/src/media/naming.ts';
 import { MediaSearch } from '../../components/MediaSearch.tsx';
@@ -29,7 +29,7 @@ import { useToast } from '../../components/Toast.tsx';
 import { Button, Card, Dialog, Empty, Field, Input, PageTitle, Poster, Select, Spinner, Tabs } from '../../components/ui.tsx';
 import { api } from '../../lib/api.ts';
 import { filesFromDrop, filesFromInput } from '../../lib/dropFiles.ts';
-import { bytes, cx, duration } from '../../lib/format.ts';
+import { bytes, cx, duration, hours } from '../../lib/format.ts';
 import { TYPE_INFO } from '../../lib/labels.ts';
 import {
   addEntries,
@@ -65,7 +65,27 @@ type MediaStatus = {
   jellyfin: boolean;
 };
 type Entry = { name: string; path: string; dir: boolean; size: number | null; mtime: string; kind: string };
-type Listing = { path: string; entries: Entry[] };
+type Listing = { path: string; entries: Entry[]; sizing?: boolean };
+type CategoryStats = {
+  key: keyof Dirs;
+  name: string;
+  exists: boolean;
+  bytes: number | null;
+  files: number | null;
+  folders: number | null;
+  subfolders: number | null;
+};
+type WatchStats = {
+  movies: { count: number; seconds: number };
+  series: { count: number; episodes: number; seconds: number };
+  music: { albums: number; tracks: number; seconds: number };
+};
+type LibraryStats = {
+  categories: CategoryStats[];
+  sizing: boolean;
+  scannedAt: string | null;
+  jellyfin: null | { ok: true; stats: WatchStats } | { ok: false; message: string };
+};
 
 const DRAG_MIME = 'application/x-bellhop-path';
 const MEDIA_TYPES: MediaType[] = ['movie', 'series', 'music'];
@@ -687,10 +707,91 @@ function MatchDialog({ group: g, open, onClose }: { group: Group; open: boolean;
 
 /* ------------------------------------------------------------------ Library */
 
+const plural = (n: number, one: string, many = one + 's') => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
+/** Reload every few seconds while the server is still measuring folders. */
+function usePollWhile(busy: boolean | undefined, reload: () => void, data: unknown) {
+  useEffect(() => {
+    if (!busy) return;
+    const t = setTimeout(reload, 2500);
+    return () => clearTimeout(t);
+  }, [busy, reload, data]);
+}
+
+const CATEGORY_TYPE = { movies: 'movie', shows: 'series', music: 'music' } as const;
+
+function categorySummary(c: CategoryStats, watch: WatchStats | null): string[] {
+  if (c.key === 'movies') {
+    if (watch) return [plural(watch.movies.count, 'movie'), `${hours(watch.movies.seconds)} of watch time`];
+    return c.folders == null ? [] : [plural(c.folders, 'movie')];
+  }
+  if (c.key === 'shows') {
+    if (watch) return [`${plural(watch.series.count, 'series', 'series')} · ${plural(watch.series.episodes, 'episode')}`, `${hours(watch.series.seconds)} of watch time`];
+    return c.folders == null ? [] : [plural(c.folders, 'series', 'series')];
+  }
+  if (watch) return [`${plural(watch.music.albums, 'album')} · ${plural(watch.music.tracks, 'track')}`, `${hours(watch.music.seconds)} of listening`];
+  return c.folders == null ? [] : [[plural(c.folders, 'artist'), c.subfolders != null && plural(c.subfolders, 'album')].filter(Boolean).join(' · ')];
+}
+
+function LibrarySummary({ stats, onOpen }: { stats: LibraryStats; onOpen: (folder: string) => void }) {
+  const watch = stats.jellyfin?.ok ? stats.jellyfin.stats : null;
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {stats.categories.map((c) => {
+          const info = TYPE_INFO[CATEGORY_TYPE[c.key]];
+          const Icon = info.icon;
+          return (
+            <button
+              key={c.key}
+              onClick={() => onOpen(c.name)}
+              disabled={!c.exists}
+              className="cursor-pointer rounded-xl border border-line bg-surface p-4 text-left transition hover:border-accent/50 disabled:cursor-default disabled:opacity-60"
+            >
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <span className={cx('grid size-7 place-items-center rounded-lg', info.tone)}>
+                  <Icon className="size-4" />
+                </span>
+                {c.name}
+              </div>
+              <div className="mt-3 text-2xl font-semibold tabular-nums">
+                {!c.exists ? <span className="text-base font-normal text-muted">Folder not found</span> : c.bytes != null ? bytes(c.bytes) : <span className="text-base font-normal text-muted">Measuring…</span>}
+              </div>
+              <div className="mt-1 space-y-0.5 text-sm text-muted">
+                {categorySummary(c, watch).map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {stats.jellyfin && !stats.jellyfin.ok && (
+        <p className="text-xs text-muted">Watch time needs Jellyfin, which didn't answer: {stats.jellyfin.message}</p>
+      )}
+    </div>
+  );
+}
+
 function Library({ status }: { status: MediaStatus }) {
   const notify = useToast();
   const [path, setPath] = useState('');
-  const { data, loading, reload } = useFetch<Listing>(`/media/browse?root=library&path=${encodeURIComponent(path)}`);
+  const { data, loading, reload: reloadListing } = useFetch<Listing>(`/media/browse?root=library&path=${encodeURIComponent(path)}`);
+  const { data: stats, reload: reloadStats } = useFetch<LibraryStats>('/media/stats');
+  const reload = () => {
+    reloadListing();
+    reloadStats();
+  };
+  usePollWhile(data?.sizing && data.entries.some((e) => e.dir && e.size == null), reloadListing, data);
+  usePollWhile(stats?.sizing, reloadStats, stats);
+  const [refreshing, setRefreshing] = useState(false);
+  // Sizes come from a cache; refreshing re-reads this folder in case it changed over SMB.
+  const refresh = async () => {
+    setRefreshing(true);
+    await api.post('/media/sizes/rescan', { path }).catch(() => {});
+    reload();
+    setRefreshing(false);
+  };
   const [renaming, setRenaming] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState<Entry | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -715,71 +816,76 @@ function Library({ status }: { status: MediaStatus }) {
   };
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <Breadcrumbs root="Library" path={path} onGo={setPath} />
-        <div className="ml-auto flex shrink-0 gap-1">
-          {status.jellyfin && (
-            <Button variant="ghost" size="sm" onClick={rescan} loading={scanning}>
-              Rescan Jellyfin
+    <div className="space-y-4">
+      {stats && <LibrarySummary stats={stats} onOpen={setPath} />}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+          <Breadcrumbs root="Library" path={path} onGo={setPath} />
+          <div className="ml-auto flex shrink-0 gap-1">
+            {status.jellyfin && (
+              <Button variant="ghost" size="sm" onClick={rescan} loading={scanning}>
+                Rescan Jellyfin
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={refresh} aria-label="Refresh">
+              <RefreshCw className={cx('size-4', (loading || refreshing) && 'animate-spin')} />
             </Button>
-          )}
-          <Button variant="ghost" size="icon" onClick={reload} aria-label="Refresh">
-            <RefreshCw className={cx('size-4', loading && 'animate-spin')} />
-          </Button>
+          </div>
         </div>
-      </div>
-      <ul className="divide-y divide-line">
-        {data?.entries.length === 0 && <li className="p-10 text-center text-sm text-muted">Nothing here yet</li>}
-        {data?.entries.map((e) => {
-          const locked = !path && protectedNames.includes(e.name);
-          return (
-            <li key={e.path} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/50">
-              {kindIcon(e.name, e.dir)}
-              {e.dir ? (
-                <button onClick={() => setPath(e.path)} className="min-w-0 flex-1 cursor-pointer truncate text-left text-sm hover:text-accent">
-                  {e.name}
-                </button>
-              ) : (
-                <span className="min-w-0 flex-1 truncate text-sm">{e.name}</span>
-              )}
-              <span className="hidden text-xs text-muted tabular-nums sm:inline">{bytes(e.size)}</span>
-              {!locked && (
-                <div className="flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-                  <Button variant="ghost" size="icon" className="size-7" onClick={() => setRenaming(e)} aria-label={`Rename ${e.name}`}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="size-7 hover:text-rose-500" onClick={() => setDeleting(e)} aria-label={`Delete ${e.name}`}>
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <RenameDialog entry={renaming} onClose={() => setRenaming(null)} onDone={reload} />
-      <Dialog
-        open={Boolean(deleting)}
-        onClose={() => setDeleting(null)}
-        title={`Delete ${deleting?.dir ? 'folder' : 'file'}?`}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setDeleting(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={remove}>
-              Delete for good
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-muted">
-          <span className="font-medium break-all text-fg">{deleting?.path}</span>
-          {deleting?.dir ? ' and everything inside it' : ''} will be removed from disk. This can't be undone.
-        </p>
-      </Dialog>
-    </Card>
+        <ul className="divide-y divide-line">
+          {data?.entries.length === 0 && <li className="p-10 text-center text-sm text-muted">Nothing here yet</li>}
+          {data?.entries.map((e) => {
+            const locked = !path && protectedNames.includes(e.name);
+            return (
+              <li key={e.path} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/50">
+                {kindIcon(e.name, e.dir)}
+                {e.dir ? (
+                  <button onClick={() => setPath(e.path)} className="min-w-0 flex-1 cursor-pointer truncate text-left text-sm hover:text-accent">
+                    {e.name}
+                  </button>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-sm">{e.name}</span>
+                )}
+                <span className="shrink-0 text-xs text-muted tabular-nums">
+                  {e.dir && e.size == null ? (data.sizing ? '…' : '') : bytes(e.size)}
+                </span>
+                {!locked && (
+                  <div className="flex gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                    <Button variant="ghost" size="icon" className="size-7" onClick={() => setRenaming(e)} aria-label={`Rename ${e.name}`}>
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="size-7 hover:text-rose-500" onClick={() => setDeleting(e)} aria-label={`Delete ${e.name}`}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <RenameDialog entry={renaming} onClose={() => setRenaming(null)} onDone={reload} />
+        <Dialog
+          open={Boolean(deleting)}
+          onClose={() => setDeleting(null)}
+          title={`Delete ${deleting?.dir ? 'folder' : 'file'}?`}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDeleting(null)}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={remove}>
+                Delete for good
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted">
+            <span className="font-medium break-all text-fg">{deleting?.path}</span>
+            {deleting?.dir ? ' and everything inside it' : ''} will be removed from disk. This can't be undone.
+          </p>
+        </Dialog>
+      </Card>
+    </div>
   );
 }
 

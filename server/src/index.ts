@@ -8,7 +8,7 @@ import { HTTPException } from 'hono/http-exception';
 import { isCrossOrigin, sameOrigin, seedAdmin, userFromCookieHeader, type AppEnv } from './auth.ts';
 import { config } from './config.ts';
 import { authRoutes } from './routes/auth.ts';
-import { cleanupUploads, mediaRoutes, tus } from './routes/media.ts';
+import { cleanupUploads, mediaRoutes, startLibrarySizes, tus } from './routes/media.ts';
 import { serviceRoutes } from './routes/services.ts';
 import { lookupRoutes, settingsRoutes } from './routes/settings.ts';
 import { speedTestRoutes } from './routes/speedtest.ts';
@@ -21,6 +21,7 @@ seedAdmin();
 cleanupUploads();
 setInterval(cleanupUploads, 6 * 3600e3).unref();
 startHealthChecks();
+startLibrarySizes();
 
 const app = new Hono<AppEnv>();
 

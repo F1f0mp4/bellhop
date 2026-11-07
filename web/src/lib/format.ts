@@ -23,6 +23,14 @@ export function duration(seconds: number | undefined): string {
   return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
 }
 
+/** 45 min, 1 hour, 1,234 hours: for totals too big to read in hours and minutes. */
+export function hours(seconds: number | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return '';
+  if (seconds < 3600) return duration(seconds);
+  const h = Math.round(seconds / 3600);
+  return `${h.toLocaleString()} ${h === 1 ? 'hour' : 'hours'}`;
+}
+
 export function bytes(n: number | null | undefined): string {
   if (n == null) return '';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

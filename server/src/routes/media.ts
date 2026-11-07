@@ -8,10 +8,11 @@ import { HTTPException } from 'hono/http-exception';
 import { requireAdmin, type AppEnv } from '../auth.ts';
 import { config } from '../config.ts';
 import { getSetting, one } from '../db.ts';
-import { refreshLibrary } from '../media/jellyfin.ts';
+import { refreshLibrary, watchStats } from '../media/jellyfin.ts';
 import { buildTarget, isImportable, kindOf, validateMeta, type Dirs, type Meta } from '../media/naming.ts';
 import { removeTree } from '../media/removeTree.ts';
 import { resolveInside, toRel, UnsafePathError } from '../media/safePath.ts';
+import { SizeIndex } from '../media/sizes.ts';
 import { setStatus } from './tickets.ts';
 
 // Uploads land on the same disk as the library so the final move is an instant rename.
@@ -55,6 +56,38 @@ tus.on(EVENTS.POST_CREATE, (_req, upload) =>
 tus.on(EVENTS.POST_FINISH, (_req, _res, upload) =>
   console.log(`  upload received: ${upload.metadata?.filename ?? upload.id} (${mb(upload.size)})`),
 );
+
+// Folder sizes are walked in the background and kept in memory; browsing only reads the cache.
+// Bellhop's own changes refresh just the folders they touch. The periodic walk catches what
+// changed behind its back, over SMB or from Jellyfin.
+const sizes = new SizeIndex(config.mediaDir, [TMP]);
+
+export function startLibrarySizes() {
+  const walk = () => {
+    const t = Date.now();
+    sizes.rescanAll().then(() => console.log(`  library sizes updated in ${((Date.now() - t) / 1000).toFixed(1)} s`), () => {});
+  };
+  walk();
+  setInterval(walk, 6 * 3600e3).unref();
+}
+
+// Jellyfin's numbers change only after it rescans, so a few minutes of caching is plenty.
+let watchCache: { at: number; ttl: number; value: ReturnType<typeof watchStats> } | null = null;
+function cachedWatchStats() {
+  if (!watchCache || Date.now() - watchCache.at > watchCache.ttl) {
+    const value = watchStats();
+    const entry = { at: Date.now(), ttl: 10 * 60e3, value };
+    value.then((r) => !r.ok && (entry.ttl = 60e3));
+    watchCache = entry;
+  }
+  return watchCache.value;
+}
+
+/** Something under the library changed: refresh its folder sizes and forget Jellyfin's numbers. */
+function libraryChanged(...abs: string[]) {
+  sizes.changed(...abs).catch(() => {});
+  watchCache = null;
+}
 
 export function cleanupUploads() {
   tus.cleanUpExpiredUploads().catch(() => {});
@@ -129,17 +162,60 @@ mediaRoutes.get('/browse', async (c) => {
     const full = path.join(dir, e.name);
     const st = await fsp.stat(full).catch(() => null);
     if (!st) continue;
+    const dirSize = st.isDirectory() && root === config.mediaDir ? sizes.get(full) : undefined;
     out.push({
       name: e.name,
       path: toRel(root, full),
       dir: st.isDirectory(),
-      size: st.isDirectory() ? null : st.size,
+      size: st.isDirectory() ? (dirSize?.bytes ?? null) : st.size,
       mtime: st.mtime.toISOString(),
       kind: st.isDirectory() ? 'folder' : kindOf(e.name),
     });
   }
   out.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  return c.json({ path: toRel(root, dir), entries: out });
+  return c.json({ path: toRel(root, dir), entries: out, sizing: root === config.mediaDir && sizes.busy });
+});
+
+// One summary per library folder: disk use from the size cache, counts and play time from Jellyfin.
+mediaRoutes.get('/stats', async (c) => {
+  const jellyfinOn = Boolean(getSetting('jellyfin_url') && getSetting('jellyfin_key'));
+  const categories = await Promise.all(
+    Object.entries(dirs()).map(async ([key, name]) => {
+      const dir = path.join(config.mediaDir, name);
+      const size = sizes.get(dir);
+      // Music is Artist/Album/, so albums are the folders one level further down.
+      let subfolders: number | null = null;
+      if (size && key === 'music') {
+        const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+        subfolders = entries
+          .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+          .reduce((n, e) => n + (sizes.get(path.join(dir, e.name))?.folders ?? 0), 0);
+      }
+      return {
+        key,
+        name,
+        exists: await exists(dir),
+        bytes: size?.bytes ?? null,
+        files: size?.files ?? null,
+        folders: size?.folders ?? null,
+        subfolders,
+      };
+    }),
+  );
+  return c.json({
+    categories,
+    sizing: sizes.busy,
+    scannedAt: sizes.scannedAt?.toISOString() ?? null,
+    jellyfin: jellyfinOn ? await cachedWatchStats() : null,
+  });
+});
+
+// The refresh button in the library browser: re-read sizes under a folder, e.g. after changes over SMB.
+mediaRoutes.post('/sizes/rescan', async (c) => {
+  const { path: rel } = await c.req.json<{ path?: string }>();
+  const abs = safe(() => resolveInside(config.mediaDir, rel ?? ''));
+  libraryChanged(abs);
+  return c.json({ ok: true });
 });
 
 // Every importable file under an incoming path, with the folder it sat in as a naming hint.
@@ -235,6 +311,9 @@ mediaRoutes.post('/import', async (c) => {
   }
 
   const imported = results.filter((r) => r.ok).length;
+  // Re-read each title's folder (Shows/1883 (2021), not the whole of Shows/) and its parents.
+  const touched = new Set(results.filter((r) => r.ok).map((r) => path.join(config.mediaDir, ...r.to.split('/').slice(0, 2))));
+  if (touched.size) libraryChanged(...touched);
   const jellyfin = imported ? await refreshLibrary() : null;
 
   let ticket = null;
@@ -248,7 +327,10 @@ mediaRoutes.post('/import', async (c) => {
   return c.json({ results, imported, jellyfin, ticket });
 });
 
-mediaRoutes.post('/refresh', async (c) => c.json(await refreshLibrary()));
+mediaRoutes.post('/refresh', async (c) => {
+  watchCache = null;
+  return c.json(await refreshLibrary());
+});
 
 // Top-level library folders are off limits so a stray click can't wipe Movies/.
 function guardLibraryPath(rel: string) {
@@ -274,6 +356,7 @@ mediaRoutes.post('/library/rename', async (c) => {
     if (!(code in FS_REASONS)) throw e;
     throw new HTTPException(409, { message: `Couldn't rename ${path.basename(src)}: ${fsReason(code)}` });
   }
+  libraryChanged(src, dst);
   return c.json({ ok: true, path: toRel(config.mediaDir, dst) });
 });
 
@@ -292,6 +375,7 @@ mediaRoutes.post('/library/delete', async (c) => {
   const target = guardLibraryPath(rel);
   if (!(await exists(target))) throw new HTTPException(404, { message: 'Already gone' });
   const failures = await removeTree(target);
+  libraryChanged(target);
   if (failures.length) {
     // Hidden files like .chapters/ don't show in the browser, so name the one that's stuck.
     const first = failures[0];
