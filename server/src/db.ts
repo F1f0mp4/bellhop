@@ -15,12 +15,21 @@ db.exec(fs.readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
 const hasColumn = (table: string, column: string) =>
   db.prepare(`PRAGMA table_info(${table})`).all().some((c: any) => c.name === column);
 
-if (!hasColumn('users', 'last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
-if (!hasColumn('wiki_pages', 'category')) db.exec("ALTER TABLE wiki_pages ADD COLUMN category TEXT NOT NULL DEFAULT ''");
-if (!hasColumn('wiki_pages', 'created_by')) {
-  // Who created older pages was never kept; their last editor is the best guess.
-  db.exec(`ALTER TABLE wiki_pages ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
-           UPDATE wiki_pages SET created_by = updated_by;`);
+// Checked and added under the write lock: two processes opening a fresh database together (the test
+// files run in parallel) would otherwise both see a column missing and the second add would fail.
+db.exec('BEGIN IMMEDIATE');
+try {
+  if (!hasColumn('users', 'last_seen_at')) db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
+  if (!hasColumn('wiki_pages', 'category')) db.exec("ALTER TABLE wiki_pages ADD COLUMN category TEXT NOT NULL DEFAULT ''");
+  if (!hasColumn('wiki_pages', 'created_by')) {
+    // Who created older pages was never kept; their last editor is the best guess.
+    db.exec(`ALTER TABLE wiki_pages ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+             UPDATE wiki_pages SET created_by = updated_by;`);
+  }
+  db.exec('COMMIT');
+} catch (e) {
+  db.exec('ROLLBACK');
+  throw e;
 }
 
 type Row = Record<string, any>;
