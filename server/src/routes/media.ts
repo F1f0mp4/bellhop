@@ -10,6 +10,7 @@ import { config } from '../config.ts';
 import { getSetting, one } from '../db.ts';
 import { refreshLibrary } from '../media/jellyfin.ts';
 import { buildTarget, isImportable, kindOf, validateMeta, type Dirs, type Meta } from '../media/naming.ts';
+import { removeTree } from '../media/removeTree.ts';
 import { resolveInside, toRel, UnsafePathError } from '../media/safePath.ts';
 import { setStatus } from './tickets.ts';
 
@@ -266,14 +267,40 @@ mediaRoutes.post('/library/rename', async (c) => {
   if (!clean || /[\\/]/.test(clean) || clean.startsWith('.')) throw new HTTPException(400, { message: 'Pick a plain name without slashes' });
   const dst = path.join(path.dirname(src), clean);
   if (await exists(dst)) throw new HTTPException(409, { message: 'Something with that name is already there' });
-  await fsp.rename(src, dst);
+  try {
+    await fsp.rename(src, dst);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? '';
+    if (!(code in FS_REASONS)) throw e;
+    throw new HTTPException(409, { message: `Couldn't rename ${path.basename(src)}: ${fsReason(code)}` });
+  }
   return c.json({ ok: true, path: toRel(config.mediaDir, dst) });
 });
+
+// EPERM on Linux means the file itself refuses, which is how a file "Locked" in Finder (or marked
+// read-only over SMB) shows up. EACCES means the folder isn't writable for the user Bellhop runs as.
+const FS_REASONS: Record<string, () => string> = {
+  EPERM: () => 'it is locked or read-only (in Finder: Get Info, untick Locked)',
+  EACCES: () => `no permission as user ${runAs()}`,
+  EBUSY: () => 'it is in use',
+  EROFS: () => 'the disk is read-only',
+};
+const fsReason = (code: string) => FS_REASONS[code]?.() ?? code;
 
 mediaRoutes.post('/library/delete', async (c) => {
   const { path: rel } = await c.req.json<{ path: string }>();
   const target = guardLibraryPath(rel);
   if (!(await exists(target))) throw new HTTPException(404, { message: 'Already gone' });
-  await fsp.rm(target, { recursive: true });
+  const failures = await removeTree(target);
+  if (failures.length) {
+    // Hidden files like .chapters/ don't show in the browser, so name the one that's stuck.
+    const first = failures[0];
+    const where = path.relative(path.dirname(target), first.path);
+    const more = failures.length > 1 ? ` and ${failures.length - 1} more` : '';
+    console.warn(`  delete ${toRel(config.mediaDir, target)}: ${failures.length} left behind, first ${where} (${first.code})`);
+    throw new HTTPException(409, {
+      message: `Deleted what it could, but ${where}${more} couldn't be removed: ${fsReason(first.code)}`,
+    });
+  }
   return c.json({ ok: true });
 });

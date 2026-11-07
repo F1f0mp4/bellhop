@@ -50,6 +50,8 @@ app.get('/*', (c) => {
 app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
   if (err instanceof SyntaxError) return c.json({ error: 'Bad request body' }, 400);
+  // The browser hung up mid-body (the speed test stops its streams this way); nobody is listening.
+  if ((err as NodeJS.ErrnoException).code === 'ECONNRESET') return c.json({ error: 'Request aborted' }, 400);
   console.error(err);
   return c.json({ error: 'Something went wrong on the server' }, 500);
 });
