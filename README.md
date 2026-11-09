@@ -142,6 +142,15 @@ On first start it's filled with a starter list (Jellyfin, Finamp, VLC, Firefox, 
 LocalSend, Home Assistant and about twenty more). Remove what you don't want; removed apps stay in the
 starter list under **Manage apps** to add back later.
 
+The starter list also has **FreeCAD**, **OrcaSlicer**, **Ollama**, **Zed** (an AI code editor that works with Ollama), **Arduino IDE**
+and **Thonny** with
+their installers kept on this server, so they still install when the internet is down. On a Bellhop
+that was already running, add them from **Manage apps → Starter list**. Together they take about 10 GB, half of it Ollama.
+Like every release file, they always follow the project's latest stable GitHub release; previews,
+release candidates and nightlies are skipped. [docs/offline-apps.md](docs/offline-apps.md) explains
+installing and setting them up on Mac, Windows and Linux, including Zed with Ollama as an offline AI
+code editor.
+
 Each download is one of:
 
 - **Link:** App Store, Google Play, F-Droid, Flathub or a website.

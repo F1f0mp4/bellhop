@@ -2,7 +2,8 @@ import { db, getSetting, one, setSetting } from '../db.ts';
 import { slugify } from '../slug.ts';
 import type { Platform } from './updates.ts';
 
-type StarterDownload = { platform: Platform; label?: string; url?: string; asset?: string };
+/** `keep` serves the release file from this server, so it still installs when the internet is down. */
+type StarterDownload = { platform: Platform; label?: string; url?: string; asset?: string; keep?: boolean };
 
 export type StarterApp = {
   key: string;
@@ -476,6 +477,122 @@ export const STARTER_APPS: StarterApp[] = [
       { platform: 'android', url: play('io.homeassistant.companion.android') },
     ],
   },
+  {
+    key: 'freecad',
+    name: 'FreeCAD',
+    developer: 'FreeCAD',
+    subtitle: 'Design parts in 3D for printing and making',
+    description:
+      'Parametric 3D modelling: sketch a shape, give it dimensions, and change a number later to resize the whole part. Exports STL and STEP for the slicer or a CNC.\n\nThe installers are kept on the house server, so they install without an internet connection.',
+    category: 'Making',
+    repo: 'FreeCAD/FreeCAD',
+    homepage: 'https://www.freecad.org',
+    license: 'LGPL-2.1',
+    tint: '#c5281c',
+    downloads: [
+      { platform: 'macos', label: 'Apple silicon', asset: 'FreeCAD_*-macOS-arm64-*.dmg', keep: true },
+      { platform: 'macos', label: 'Intel', asset: 'FreeCAD_*-macOS-x86_64-*.dmg', keep: true },
+      { platform: 'windows', asset: 'FreeCAD_*-Windows-x86_64-*-installer.exe', keep: true },
+      { platform: 'linux', label: 'AppImage', asset: 'FreeCAD_*-Linux-x86_64-*.AppImage', keep: true },
+      { platform: 'linux', label: 'AppImage (ARM, Raspberry Pi)', asset: 'FreeCAD_*-Linux-aarch64-*.AppImage', keep: true },
+    ],
+  },
+  {
+    key: 'orcaslicer',
+    name: 'OrcaSlicer',
+    developer: 'OrcaSlicer contributors',
+    subtitle: 'Turn 3D models into prints',
+    description:
+      'Slices STL, 3MF and STEP files for Bambu, Prusa, Creality, Voron and most other printers, with calibration tests built in and print sending over the network.\n\nThe installers are kept on the house server, so they install without an internet connection.',
+    category: 'Making',
+    repo: 'OrcaSlicer/OrcaSlicer',
+    homepage: 'https://orcaslicer.com',
+    license: 'AGPL-3.0',
+    tint: '#009688',
+    downloads: [
+      { platform: 'macos', asset: 'OrcaSlicer_Mac_universal_*.dmg', keep: true },
+      { platform: 'windows', asset: 'OrcaSlicer_Windows_Installer_*_x64.exe', keep: true },
+      { platform: 'linux', label: 'AppImage', asset: 'OrcaSlicer_Linux_AppImage_Ubuntu2404_V*.AppImage', keep: true },
+    ],
+  },
+  {
+    key: 'zed',
+    name: 'Zed',
+    developer: 'Zed Industries',
+    subtitle: 'AI code editor that runs on your own models',
+    description:
+      'A fast code editor with an AI agent that writes and edits code across your project, like Cursor. Point it at Ollama and the AI runs on the house hardware, with nothing sent to the cloud and nothing needed from the internet.\n\nPython, C and C++ work out of the box. Language tools like clangd and pyright download the first time you open such a file, so open one of each while you\u2019re online.\n\nThe installers are kept on the house server.',
+    category: 'Coding',
+    repo: 'zed-industries/zed',
+    homepage: 'https://zed.dev',
+    license: 'GPL-3.0',
+    tint: '#084ccf',
+    featured: true,
+    downloads: [
+      { platform: 'macos', label: 'Apple silicon', asset: 'Zed-aarch64.dmg', keep: true },
+      { platform: 'macos', label: 'Intel', asset: 'Zed-x86_64.dmg', keep: true },
+      { platform: 'windows', asset: 'Zed-x86_64.exe', keep: true },
+      { platform: 'linux', label: 'x86_64', asset: 'zed-linux-x86_64.tar.gz', keep: true },
+      { platform: 'linux', label: 'ARM (Raspberry Pi)', asset: 'zed-linux-aarch64.tar.gz', keep: true },
+    ],
+  },
+  {
+    key: 'arduino-ide',
+    name: 'Arduino IDE',
+    developer: 'Arduino',
+    subtitle: 'Write C++ and upload it to Arduino boards',
+    description:
+      'Write sketches in Arduino C/C++, upload them over USB and watch the serial monitor. Also programs ESP32 and Raspberry Pi Pico boards once their board package is added.\n\nThe installers are kept on the house server. Board packages and libraries still download from the internet the first time, so add the boards you use while you\u2019re online.',
+    category: 'Coding',
+    repo: 'arduino/arduino-ide',
+    homepage: 'https://www.arduino.cc/en/software',
+    license: 'AGPL-3.0',
+    tint: '#00878f',
+    downloads: [
+      { platform: 'macos', label: 'Apple silicon', asset: 'arduino-ide_*_macOS_arm64.dmg', keep: true },
+      { platform: 'macos', label: 'Intel', asset: 'arduino-ide_*_macOS_64bit.dmg', keep: true },
+      { platform: 'windows', asset: 'arduino-ide_*_Windows_64bit.exe', keep: true },
+      { platform: 'linux', label: 'AppImage', asset: 'arduino-ide_*_Linux_64bit.AppImage', keep: true },
+    ],
+  },
+  {
+    key: 'thonny',
+    name: 'Thonny',
+    developer: 'Thonny',
+    subtitle: 'Python for beginners and the Raspberry Pi',
+    description:
+      'A simple Python editor with a step-by-step debugger that shows what every line does. Runs MicroPython on a Raspberry Pi Pico or ESP32 over USB, with a file browser for the board.\n\nRaspberry Pi OS already comes with Thonny. The Mac and Windows installers are kept on the house server.',
+    category: 'Coding',
+    repo: 'thonny/thonny',
+    homepage: 'https://thonny.org',
+    license: 'MIT',
+    tint: '#3776ab',
+    downloads: [
+      { platform: 'macos', label: 'Apple silicon', asset: 'thonny-*-arm64.pkg', keep: true },
+      { platform: 'macos', label: 'Intel', asset: 'thonny-*-x64.pkg', keep: true },
+      { platform: 'windows', asset: 'thonny-*-x64.exe', keep: true },
+      { platform: 'linux', label: 'Flathub', url: flathub('org.thonny.Thonny') },
+    ],
+  },
+  {
+    key: 'ollama',
+    name: 'Ollama',
+    developer: 'Ollama',
+    subtitle: 'Run AI models on your own computer',
+    description:
+      'Chat with open models like Llama, Gemma, Qwen and Mistral without sending anything to the cloud. Once a model is downloaded it works fully offline.\n\nThe installers are kept on the house server. Models are downloaded inside the app (ollama pull) while online.',
+    category: 'AI',
+    repo: 'ollama/ollama',
+    homepage: 'https://ollama.com',
+    license: 'MIT',
+    tint: '#1a1a1a',
+    downloads: [
+      { platform: 'macos', asset: 'Ollama.dmg', keep: true },
+      { platform: 'windows', asset: 'OllamaSetup.exe', keep: true },
+      { platform: 'linux', label: 'x86_64', asset: 'ollama-linux-amd64.tar.zst', keep: true },
+      { platform: 'linux', label: 'ARM (Raspberry Pi)', asset: 'ollama-linux-arm64.tar.zst', keep: true },
+    ],
+  },
 ];
 
 /** Adds starter apps by key, skipping any already in the catalog. Returns how many were added. */
@@ -487,7 +604,7 @@ export function addStarterApps(keys: string[]): number {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertDownload = db.prepare(
-    `INSERT INTO app_downloads (app_id, platform, label, source, url, asset, position) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO app_downloads (app_id, platform, label, source, url, asset, keep, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   let pos = one<{ p: number }>('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM apps')!.p;
   db.exec('BEGIN');
@@ -500,7 +617,7 @@ export function addStarterApps(keys: string[]): number {
         a.icon_url ?? '', a.tint ?? '', a.featured ? 1 : 0, a.key, pos++,
       );
       a.downloads.forEach((d, i) =>
-        insertDownload.run(Number(res.lastInsertRowid), d.platform, d.label ?? '', d.asset ? 'release' : 'link', d.url ?? '', d.asset ?? '', i),
+        insertDownload.run(Number(res.lastInsertRowid), d.platform, d.label ?? '', d.asset ? 'release' : 'link', d.url ?? '', d.asset ?? '', d.asset && d.keep ? 1 : 0, i),
       );
     }
     db.exec('COMMIT');

@@ -361,3 +361,65 @@ test('starter apps are added once', () => {
   );
   assert.deepEqual({ ...d }, { source: 'release', asset: 'UTM.ipa' });
 });
+
+test('maker and coding starter patterns pick the right file from real releases', () => {
+  // File names from each project's latest release in November 2026.
+  const releases: Record<string, string[]> = {
+    freecad: [
+      'FreeCAD_1.1.4-Linux-aarch64-py311.AppImage', 'FreeCAD_1.1.4-Linux-aarch64-py311.AppImage-SHA256.txt',
+      'FreeCAD_1.1.4-Linux-aarch64-py311.AppImage.zsync', 'FreeCAD_1.1.4-Linux-x86_64-py311.AppImage',
+      'FreeCAD_1.1.4-macOS-arm64-py311.dmg', 'FreeCAD_1.1.4-macOS-arm64-py311.dmg-SHA256.txt',
+      'FreeCAD_1.1.4-macOS-x86_64-py311.dmg', 'FreeCAD_1.1.4-Windows-x86_64-py311-installer.exe',
+      'FreeCAD_1.1.4-Windows-x86_64-py311.7z', 'freecad_source_1.1.4.tar.gz',
+    ],
+    orcaslicer: [
+      'OrcaSlicer-Linux-flatpak_V2.5.0_x86_64.flatpak', 'OrcaSlicer_Linux_AppImage_Ubuntu2404_aarch64_V2.5.0.AppImage',
+      'OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.5.0.AppImage', 'OrcaSlicer_Mac_universal_V2.5.0.dmg',
+      'OrcaSlicer_Windows_Installer_V2.5.0_arm64.exe', 'OrcaSlicer_Windows_Installer_V2.5.0_x64.exe',
+      'OrcaSlicer_Windows_V2.5.0_x64_portable.zip',
+    ],
+    'arduino-ide': [
+      'arduino-ide_2.3.10_Linux_64bit.AppImage', 'arduino-ide_2.3.10_Linux_64bit.zip', 'arduino-ide_2.3.10_macOS_64bit.dmg',
+      'arduino-ide_2.3.10_macOS_arm64.dmg', 'arduino-ide_2.3.10_Windows_64bit.exe', 'arduino-ide_2.3.10_Windows_64bit.msi',
+    ],
+    zed: [
+      'bwrap-linux-x86_64.gz', 'Zed-aarch64.dmg', 'Zed-aarch64.exe', 'zed-linux-aarch64.tar.gz', 'zed-linux-x86_64.tar.gz',
+      'zed-remote-server-linux-x86_64.gz', 'zed-remote-server-windows-x86_64.zip', 'Zed-x86_64.dmg', 'Zed-x86_64.exe',
+    ],
+    thonny: ['thonny-5.0.1-arm64.exe', 'thonny-5.0.1-arm64.pkg', 'thonny-5.0.1-windows-portable-x64.zip', 'thonny-5.0.1-x64.exe', 'thonny-5.0.1-x64.pkg'],
+    ollama: [
+      'ollama-darwin.tgz', 'Ollama-darwin.zip', 'ollama-linux-amd64-rocm.tar.zst', 'ollama-linux-amd64.tar.zst',
+      'ollama-linux-arm64-jetpack6.tar.zst', 'ollama-linux-arm64.tar.zst', 'ollama-windows-amd64.zip', 'Ollama.dmg', 'OllamaSetup.exe', 'sha256sum.txt',
+    ],
+  };
+  const expected: Record<string, string[]> = {
+    freecad: [
+      'FreeCAD_1.1.4-macOS-arm64-py311.dmg', 'FreeCAD_1.1.4-macOS-x86_64-py311.dmg', 'FreeCAD_1.1.4-Windows-x86_64-py311-installer.exe',
+      'FreeCAD_1.1.4-Linux-x86_64-py311.AppImage', 'FreeCAD_1.1.4-Linux-aarch64-py311.AppImage',
+    ],
+    orcaslicer: ['OrcaSlicer_Mac_universal_V2.5.0.dmg', 'OrcaSlicer_Windows_Installer_V2.5.0_x64.exe', 'OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.5.0.AppImage'],
+    'arduino-ide': [
+      'arduino-ide_2.3.10_macOS_arm64.dmg', 'arduino-ide_2.3.10_macOS_64bit.dmg', 'arduino-ide_2.3.10_Windows_64bit.exe', 'arduino-ide_2.3.10_Linux_64bit.AppImage',
+    ],
+    zed: ['Zed-aarch64.dmg', 'Zed-x86_64.dmg', 'Zed-x86_64.exe', 'zed-linux-x86_64.tar.gz', 'zed-linux-aarch64.tar.gz'],
+    thonny: ['thonny-5.0.1-arm64.pkg', 'thonny-5.0.1-x64.pkg', 'thonny-5.0.1-x64.exe'],
+    ollama: ['Ollama.dmg', 'OllamaSetup.exe', 'ollama-linux-amd64.tar.zst', 'ollama-linux-arm64.tar.zst'],
+  };
+  for (const [key, names] of Object.entries(releases)) {
+    const assets = names.map((name) => ({ name, size: 1, url: `https://example.com/${name}` }));
+    const app = STARTER_APPS.find((a) => a.key === key)!;
+    const picked = app.downloads.filter((d) => d.asset).map((d) => matchAsset(d.asset!, assets)?.name);
+    assert.deepEqual(picked, expected[key], key);
+  }
+});
+
+test('starter release files marked keep are kept on the server', () => {
+  addStarterApps(['orcaslicer', 'thonny']);
+  const rows = (key: string) =>
+    one<{ kept: number; links: number }>(
+      "SELECT SUM(d.keep) AS kept, SUM(d.source = 'link') AS links FROM app_downloads d JOIN apps a ON a.id = d.app_id WHERE a.starter = ?",
+      key,
+    );
+  assert.deepEqual({ ...rows('orcaslicer') }, { kept: 3, links: 0 });
+  assert.deepEqual({ ...rows('thonny') }, { kept: 3, links: 1 }); // the Flathub link isn't a file to keep
+});
